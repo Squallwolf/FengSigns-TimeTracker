@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<div class="header">
+    <h1>👥 Mitarbeiter</h1>
+    <a href="/dashboard" class="logout">← Zurück</a>
+</div>
+
+<div class="card">
+    <h3>Neu anlegen</h3>
+    <form method="post">
+        <div class="form-group">
+            <input type="text" name="name" class="form-control" placeholder="Name" required>
+        </div>
+        <div class="form-group">
+            <input type="password" name="pin" class="form-control" placeholder="PIN (4-stellig)" 
+                   maxlength="4" pattern="\d{4}" required>
+        </div>
+        <button type="submit" class="btn">Hinzufügen</button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Übersicht</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>PIN</th>
+                <th>Status</th>
+                <th>Aktion</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for emp in employees %}
+            <tr>
+                <td>{{ emp.name }}</td>
+                <td>{{ emp.pin }}</td>
+                <td>
+                    {% if emp.active %}
+                        {{ '✅' if emp.is_present else '⭕' }}
+                    {% else %}
+                        ❌ inaktiv
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/admin/toggle/{{ emp.id }}" class="btn btn-secondary" 
+                       style="padding: 6px 12px; font-size: 14px;">
+                        {{ 'Deaktivieren' if emp.active else 'Aktivieren' }}
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

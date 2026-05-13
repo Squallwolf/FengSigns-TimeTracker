@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="header">
+    <h1>Hallo, {{ name }}</h1>
+    <a href="/logout" class="logout">Abmelden</a>
+</div>
+
+<div class="status {{ 'present' if is_present else 'absent' }}">
+    Status: {{ '✅ ANWESEND' if is_present else '❌ ABWESEND' }}
+</div>
+
+<div class="card" style="text-align: center;">
+    <form method="post">
+        {% if is_present %}
+            <button type="submit" name="action" value="OUT" class="btn btn-large btn-out">
+                🚪 AUSCHECKEN
+            </button>
+        {% else %}
+            <button type="submit" name="action" value="IN" class="btn btn-large btn-in">
+                ✅ EINCHECKEN
+            </button>
+        {% endif %}
+    </form>
+</div>
+
+{% if today_scans %}
+<div class="card">
+    <h3>📅 Heute</h3>
+    <table>
+        {% for scan in today_scans %}
+        <tr>
+            <td>{{ scan.time }}</td>
+            <td><strong>{{ scan.event_type }}</strong></td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+{% if recent_scans %}
+<div class="card">
+    <h3>🕒 Letzte Buchungen</h3>
+    <table>
+        {% for scan in recent_scans %}
+        <tr>
+            <td>{{ scan.time }}</td>
+            <td>{{ scan.event_type }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endif %}
+
+<div style="text-align: center; margin-top: 20px;">
+    <a href="/admin" class="btn btn-secondary">Admin-Bereich</a>
+</div>
+{% endblock %}
