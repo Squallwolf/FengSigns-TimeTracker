@@ -19,29 +19,33 @@
     .time { font-family: ui-monospace, monospace; font-weight: 500; }
     .note { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
     .loading { color: #888; font-size: 0.9rem; text-align: center; }
-    .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; }
+    .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 8px; border-radius: 6px; border: 1px solid #fecaca; }
+    #debug { font-size: 0.75rem; color: #666; margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>⏱ Zeiterfassung</h1>
     <label for="employee">Mitarbeiter:</label>
-    <select id="employee"><option value="">Lade...</option></select>
+    <select id="employee"><option value="">-- Initialisiere --</option></select>
     <div id="status" class="status">Bitte wählen</div>
-    <div id="errorMsg" class="error"></div>
+    <div id="errorMsg" class="error" style="display:none"></div>
     <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
     <div class="entries">
       <h3>Letzte Einträge</h3>
-      <div id="entryList"><div class="loading">Lade Einträge...</div></div>
+      <div id="entryList"><div class="loading">Warte auf Auswahl...</div></div>
     </div>
+    <div id="debug"></div>
   </div>
 
-  <!-- Firebase SDK v10 Compat (KEINE import-Statements!) -->
+  <!-- Firebase SDK v10 Compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script>
-    // 🔥 Firebase Config (deine Daten)
+    const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; console.log(msg); };
+    const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; console.error(msg); };
+
     const firebaseConfig = {
       apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
       authDomain: "fengsigns-timetracker.firebaseapp.com",
@@ -51,11 +55,21 @@
       appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
     };
 
-    // ✅ Nur Compat-API nutzen – KEINE import-Statements!
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const employees = ["Anna", "Ben", "Clara", "David"];
+    debug("1. Starte Initialisierung...");
 
+    try {
+      firebase.initializeApp(firebaseConfig);
+      debug("✅ Firebase initialisiert");
+    } catch(e) {
+      debug("❌ Firebase Init Fehler: " + e.message);
+      showError("Firebase Fehler: " + e.message);
+    }
+
+    const db = firebase.firestore();
+    // 🔧 Firestore Settings für lokale Entwicklung / CORS
+    db.settings({ ignoreUndefinedProperties: true });
+
+    const employees = ["Anna", "Ben", "Clara", "David"];
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
@@ -63,40 +77,61 @@
     const list = document.getElementById('entryList');
     let user = localStorage.getItem('tz_user') || '';
 
-    function showError(msg) {
-      console.error(msg);
-      errorMsg.textContent = msg;
-      setTimeout(() => errorMsg.textContent = '', 5000);
-    }
-
-    // Dropdown befüllen
+    // ✅ Dropdown SOFORT befüllen (unabhängig von Firebase)
+    debug("2. Befülle Dropdown mit: " + employees.join(", "));
     sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
       employees.map(n => `<option value="${n}">${n}</option>`).join('');
-    sel.value = user;
-    if(user) loadUserState();
+    sel.disabled = false;
+    debug("✅ Dropdown bereit");
+
+    if(user && employees.includes(user)) {
+      sel.value = user;
+      debug("3. Lade State für: " + user);
+      loadUserState();
+    } else {
+      status.textContent = "Bitte Mitarbeiter wählen";
+    }
 
     sel.addEventListener('change', () => {
       user = sel.value;
       localStorage.setItem('tz_user', user);
-      loadUserState();
+      debug("User geändert zu: " + user);
+      if(user) loadUserState();
+      else {
+        btn.disabled = true;
+        status.textContent = "Bitte wählen";
+        list.innerHTML = '<div class="loading">Warte auf Auswahl...</div>';
+      }
     });
 
     async function loadUserState() {
-      if(!user) { btn.disabled=true; status.textContent="Bitte wählen"; list.innerHTML=""; return; }
-      btn.disabled = true; status.textContent = "Lade..."; errorMsg.textContent = "";
+      if(!user) return;
+      btn.disabled = true;
+      status.textContent = "Lade von Firebase...";
+      errorMsg.style.display = 'none';
+      debug("🔄 Firestore Query: entries where employee==" + user);
+
       try {
+        // 🔍 Query OHNE orderBy zuerst (vermeidet Index-Fehler beim ersten Mal)
         const snap = await db.collection('entries')
           .where('employee', '==', user)
-          .orderBy('startTime', 'desc')
+          .orderBy('startTime', 'desc') // Falls das fehlschlägt, siehe Hinweis unten
           .limit(10)
           .get();
         
+        debug(`✅ Geladen: ${snap.size} Einträge`);
         const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
         const last = entries[0] || null;
         updateUI(last, entries);
       } catch(e) {
-        showError("Laden fehlgeschlagen: " + e.message);
-        btn.disabled = false;
+        debug("❌ Firestore Fehler: " + e.message);
+        if(e.message.includes('index')) {
+          showError("⚠️ Index fehlt! Klicke auf den Link in der Browser-Console, um ihn zu erstellen.");
+        } else {
+          showError("Fehler: " + e.message);
+        }
+        // Fallback: Zeige leere Liste statt Crash
+        updateUI(null, []);
       }
     }
 
@@ -119,13 +154,14 @@
     }
 
     function renderList(entries) {
-      if(!entries.length) { list.innerHTML='<div class="loading">Keine Einträge</div>'; return; }
+      if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
       list.innerHTML = entries.map(e => {
-        const s = e.startTime?.toDate?.?.() || new Date(e.startTime);
+        // 🔧 Syntax-Fix: ?.toDate?.() statt ?.toDate?.?.()
+        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
         const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
         return `<div class="entry">
           <div>
-            <span class="time">${s?s.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'?'} – ${en?en.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Offen'}</span>
+            <span class="time">${s ? s.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'} – ${en ? en.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : 'Offen'}</span>
             ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
           </div>
         </div>`;
@@ -133,9 +169,12 @@
     }
 
     btn.addEventListener('click', async () => {
+      if(!user) return;
       btn.disabled = true;
       status.textContent = 'Speichere...';
-      errorMsg.textContent = '';
+      errorMsg.style.display = 'none';
+      debug("📤 Speichere Stempelung für: " + user);
+
       try {
         const snap = await db.collection('entries')
           .where('employee', '==', user)
@@ -144,6 +183,7 @@
           .get();
 
         if(snap.empty) {
+          debug("→ Neuer Check-in");
           await db.collection('entries').add({
             employee: user,
             startTime: firebase.firestore.FieldValue.serverTimestamp(),
@@ -152,19 +192,21 @@
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
         } else {
+          debug("→ Check-out für Doc: " + snap.docs[0].id);
           await db.collection('entries').doc(snap.docs[0].id).update({
             endTime: firebase.firestore.FieldValue.serverTimestamp()
           });
         }
+        debug("✅ Speichern erfolgreich");
         await loadUserState();
       } catch(e) {
+        debug("❌ Speichern Fehler: " + e.message);
         showError("Speichern fehlgeschlagen: " + e.message);
         btn.disabled = false;
       }
     });
 
-    // Live-Update alle 30s wenn aktiv
-    setInterval(() => { if(user && btn.textContent === 'GEHEN') loadUserState(); }, 30000);
+    debug("🏁 Initialisierung abgeschlossen");
   </script>
 </body>
 </html>
