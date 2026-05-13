@@ -19,6 +19,7 @@
     .time { font-family: ui-monospace, monospace; font-weight: 500; }
     .note { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
     .loading { color: #888; font-size: 0.9rem; text-align: center; }
+    .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; }
   </style>
 </head>
 <body>
@@ -27,6 +28,7 @@
     <label for="employee">Mitarbeiter:</label>
     <select id="employee"><option value="">Lade...</option></select>
     <div id="status" class="status">Bitte wählen</div>
+    <div id="errorMsg" class="error"></div>
     <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
     <div class="entries">
       <h3>Letzte Einträge</h3>
@@ -34,35 +36,38 @@
     </div>
   </div>
 
-  <!-- Firebase SDK v10 (Compat für einfache Nutzung ohne Build-Tool) -->
+  <!-- Firebase SDK v10 Compat (KEINE import-Statements!) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script>
-    import { initializeApp } from "firebase/app";
-	const firebaseConfig = {
-	apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
-	authDomain: "fengsigns-timetracker.firebaseapp.com",
-	projectId: "fengsigns-timetracker",
-	storageBucket: "fengsigns-timetracker.firebasestorage.app",
-	messagingSenderId: "1035298719582",
-	appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
-};
+    // 🔥 Firebase Config (deine Daten)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
+      authDomain: "fengsigns-timetracker.firebaseapp.com",
+      projectId: "fengsigns-timetracker",
+      storageBucket: "fengsigns-timetracker.firebasestorage.app",
+      messagingSenderId: "1035298719582",
+      appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
+    };
 
-
-// Initialize Firebase
-
-const app = initializeApp(firebaseConfig);
-
+    // ✅ Nur Compat-API nutzen – KEINE import-Statements!
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
-    const employees = ["Anna", "Ben", "Clara", "David"]; // Namen hier anpassen
+    const employees = ["Anna", "Ben", "Clara", "David"];
 
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
+    const errorMsg = document.getElementById('errorMsg');
     const list = document.getElementById('entryList');
     let user = localStorage.getItem('tz_user') || '';
+
+    function showError(msg) {
+      console.error(msg);
+      errorMsg.textContent = msg;
+      setTimeout(() => errorMsg.textContent = '', 5000);
+    }
 
     // Dropdown befüllen
     sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
@@ -78,18 +83,19 @@ const app = initializeApp(firebaseConfig);
 
     async function loadUserState() {
       if(!user) { btn.disabled=true; status.textContent="Bitte wählen"; list.innerHTML=""; return; }
-      btn.disabled = true; status.textContent = "Lade...";
+      btn.disabled = true; status.textContent = "Lade..."; errorMsg.textContent = "";
       try {
-        // Alle Einträge des Users holen & clientseitig sortieren (vermeidet Index-Probleme)
-        const snap = await db.collection('entries').where('employee', '==', user).get();
-        const all = snap.docs.map(d => ({id: d.id, ...d.data()}))
-          .sort((a,b) => b.startTime.toMillis() - a.startTime.toMillis());
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .orderBy('startTime', 'desc')
+          .limit(10)
+          .get();
         
-        const last = all[0] || null;
-        updateUI(last, all.slice(0, 10));
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        const last = entries[0] || null;
+        updateUI(last, entries);
       } catch(e) {
-        console.error(e);
-        status.textContent = "Fehler beim Laden";
+        showError("Laden fehlgeschlagen: " + e.message);
         btn.disabled = false;
       }
     }
@@ -98,7 +104,7 @@ const app = initializeApp(firebaseConfig);
       if(last && !last.endTime) {
         btn.textContent = 'GEHEN';
         btn.classList.add('check-out');
-        const start = last.startTime.toDate();
+        const start = last.startTime?.toDate?.() || new Date(last.startTime);
         const diff = Date.now() - start.getTime();
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
@@ -115,8 +121,8 @@ const app = initializeApp(firebaseConfig);
     function renderList(entries) {
       if(!entries.length) { list.innerHTML='<div class="loading">Keine Einträge</div>'; return; }
       list.innerHTML = entries.map(e => {
-        const s = e.startTime ? e.startTime.toDate() : null;
-        const en = e.endTime ? e.endTime.toDate() : null;
+        const s = e.startTime?.toDate?.?.() || new Date(e.startTime);
+        const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
         return `<div class="entry">
           <div>
             <span class="time">${s?s.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'?'} – ${en?en.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Offen'}</span>
@@ -129,6 +135,7 @@ const app = initializeApp(firebaseConfig);
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       status.textContent = 'Speichere...';
+      errorMsg.textContent = '';
       try {
         const snap = await db.collection('entries')
           .where('employee', '==', user)
@@ -137,23 +144,21 @@ const app = initializeApp(firebaseConfig);
           .get();
 
         if(snap.empty) {
-          // KOMMEN
           await db.collection('entries').add({
             employee: user,
             startTime: firebase.firestore.FieldValue.serverTimestamp(),
             endTime: null,
-            note: ''
+            note: '',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
         } else {
-          // GEHEN
           await db.collection('entries').doc(snap.docs[0].id).update({
             endTime: firebase.firestore.FieldValue.serverTimestamp()
           });
         }
         await loadUserState();
       } catch(e) {
-        console.error(e);
-        status.textContent = 'Fehler beim Speichern';
+        showError("Speichern fehlgeschlagen: " + e.message);
         btn.disabled = false;
       }
     });
