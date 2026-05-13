@@ -15,68 +15,94 @@
     .stamp-btn.check-out { background: #dc2626; }
     .status { text-align: center; margin: 1rem 0; min-height: 1.4em; color: #4b5563; }
     .entries h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
-    .entry { padding: 0.8rem 0; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: baseline; }
-    .entry:last-child { border-bottom: none; }
+    .entry { padding: 0.8rem 0; border-bottom: 1px solid #eee; }
     .time { font-family: ui-monospace, monospace; font-weight: 500; }
     .note { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
+    .loading { color: #888; font-size: 0.9rem; text-align: center; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>⏱ Zeiterfassung</h1>
-    
     <label for="employee">Mitarbeiter:</label>
-    <select id="employee">
-      <option value="">-- Bitte wählen --</option>
-      <option value="Anna">Anna</option>
-      <option value="Ben">Ben</option>
-      <option value="Clara">Clara</option>
-      <option value="David">David</option>
-    </select>
-
-    <div id="status" class="status">Bitte Mitarbeiter wählen</div>
+    <select id="employee"><option value="">Lade...</option></select>
+    <div id="status" class="status">Bitte wählen</div>
     <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
-
     <div class="entries">
       <h3>Letzte Einträge</h3>
-      <div id="entryList"></div>
+      <div id="entryList"><div class="loading">Lade Einträge...</div></div>
     </div>
   </div>
 
+  <!-- Firebase SDK v10 (Compat für einfache Nutzung ohne Build-Tool) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
   <script>
+    import { initializeApp } from "firebase/app";
+	const firebaseConfig = {
+	apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
+	authDomain: "fengsigns-timetracker.firebaseapp.com",
+	projectId: "fengsigns-timetracker",
+	storageBucket: "fengsigns-timetracker.firebasestorage.app",
+	messagingSenderId: "1035298719582",
+	appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
+};
+
+
+// Initialize Firebase
+
+const app = initializeApp(firebaseConfig);
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const employees = ["Anna", "Ben", "Clara", "David"]; // Namen hier anpassen
+
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
     const list = document.getElementById('entryList');
-    let user = null;
+    let user = localStorage.getItem('tz_user') || '';
 
-    // Letzte Auswahl merken
-    const saved = localStorage.getItem('lastUser');
-    if (saved) { sel.value = saved; user = saved; updateUI(); }
+    // Dropdown befüllen
+    sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
+      employees.map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.value = user;
+    if(user) loadUserState();
 
-    sel.addEventListener('change', e => {
-      user = e.target.value;
-      localStorage.setItem('lastUser', user);
-      updateUI();
+    sel.addEventListener('change', () => {
+      user = sel.value;
+      localStorage.setItem('tz_user', user);
+      loadUserState();
     });
 
-    function getEntries() { return JSON.parse(localStorage.getItem(`tz_${user}`) || '[]'); }
-    function saveEntries(arr) { localStorage.setItem(`tz_${user}`, JSON.stringify(arr)); }
+    async function loadUserState() {
+      if(!user) { btn.disabled=true; status.textContent="Bitte wählen"; list.innerHTML=""; return; }
+      btn.disabled = true; status.textContent = "Lade...";
+      try {
+        // Alle Einträge des Users holen & clientseitig sortieren (vermeidet Index-Probleme)
+        const snap = await db.collection('entries').where('employee', '==', user).get();
+        const all = snap.docs.map(d => ({id: d.id, ...d.data()}))
+          .sort((a,b) => b.startTime.toMillis() - a.startTime.toMillis());
+        
+        const last = all[0] || null;
+        updateUI(last, all.slice(0, 10));
+      } catch(e) {
+        console.error(e);
+        status.textContent = "Fehler beim Laden";
+        btn.disabled = false;
+      }
+    }
 
-    function updateUI() {
-      if (!user) { btn.disabled = true; status.textContent = 'Bitte Mitarbeiter wählen'; list.innerHTML = ''; return; }
-      
-      const entries = getEntries();
-      const last = entries.length ? entries[entries.length - 1] : null;
-      
-      if (last && !last.end) {
+    function updateUI(last, entries) {
+      if(last && !last.endTime) {
         btn.textContent = 'GEHEN';
         btn.classList.add('check-out');
-        const start = new Date(last.start);
+        const start = last.startTime.toDate();
         const diff = Date.now() - start.getTime();
         const h = Math.floor(diff / 3600000);
         const m = Math.floor((diff % 3600000) / 60000);
-        status.textContent = `Aktiv seit ${start.toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})} (${h}h ${m}m)`;
+        status.textContent = `Aktiv seit ${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} (${h}h ${m}m)`;
       } else {
         btn.textContent = 'KOMMEN';
         btn.classList.remove('check-out');
@@ -87,30 +113,53 @@
     }
 
     function renderList(entries) {
-      const last5 = [...entries].reverse().slice(0, 5);
-      list.innerHTML = last5.map(e => `
-        <div class="entry">
+      if(!entries.length) { list.innerHTML='<div class="loading">Keine Einträge</div>'; return; }
+      list.innerHTML = entries.map(e => {
+        const s = e.startTime ? e.startTime.toDate() : null;
+        const en = e.endTime ? e.endTime.toDate() : null;
+        return `<div class="entry">
           <div>
-            <span class="time">${new Date(e.start).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'})} – ${e.end ? new Date(e.end).toLocaleTimeString('de-DE', {hour:'2-digit', minute:'2-digit'}) : 'Offen'}</span>
+            <span class="time">${s?s.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'?'} – ${en?en.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}):'Offen'}</span>
             ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
 
-    btn.addEventListener('click', () => {
-      const entries = getEntries();
-      const now = new Date().toISOString();
-      if (entries.length && !entries[entries.length-1].end) {
-        entries[entries.length-1].end = now;
-      } else {
-        entries.push({ start: now, end: null, note: '' });
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      status.textContent = 'Speichere...';
+      try {
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .where('endTime', '==', null)
+          .limit(1)
+          .get();
+
+        if(snap.empty) {
+          // KOMMEN
+          await db.collection('entries').add({
+            employee: user,
+            startTime: firebase.firestore.FieldValue.serverTimestamp(),
+            endTime: null,
+            note: ''
+          });
+        } else {
+          // GEHEN
+          await db.collection('entries').doc(snap.docs[0].id).update({
+            endTime: firebase.firestore.FieldValue.serverTimestamp()
+          });
+        }
+        await loadUserState();
+      } catch(e) {
+        console.error(e);
+        status.textContent = 'Fehler beim Speichern';
+        btn.disabled = false;
       }
-      saveEntries(entries);
-      updateUI();
     });
 
-    // Live-Update alle 30s
-    setInterval(updateUI, 30000);
+    // Live-Update alle 30s wenn aktiv
+    setInterval(() => { if(user && btn.textContent === 'GEHEN') loadUserState(); }, 30000);
   </script>
 </body>
 </html>
