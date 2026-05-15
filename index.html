@@ -6,42 +6,58 @@
   <title>Zeiterfassung</title>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; color: #222; }
-    .container { max-width: 420px; margin: 0 auto; background: #fff; padding: 1.5rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-    h1 { text-align: center; font-size: 1.4rem; margin: 0 0 1.5rem; }
-    label { display: block; font-weight: 500; margin-bottom: 0.4rem; }
-    select, button { width: 100%; padding: 14px; font-size: 1rem; border-radius: 10px; border: 1px solid #ccc; margin-bottom: 1rem; background: #fff; }
-    .stamp-btn { background: #2563eb; color: #fff; border: none; font-weight: 700; font-size: 1.25rem; cursor: pointer; transition: 0.2s; }
-    .stamp-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .container { max-width: 420px; margin: 0 auto; background: #fff; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    h1 { text-align: center; font-size: 1.3rem; margin: 0 0 1rem; }
+    
+    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .row label { margin: 0; white-space: nowrap; font-weight: 500; font-size: 0.9rem; }
+    .row select { flex: 1; padding: 8px; font-size: 0.95rem; border-radius: 8px; border: 1px solid #ccc; }
+    .row button { padding: 8px 12px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; }
+    
+    .stamp-btn { background: #2563eb; color: #fff; }
     .stamp-btn.check-out { background: #dc2626; }
-    .status { text-align: center; margin: 1rem 0; min-height: 1.4em; color: #4b5563; }
-    .entries h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
-    .entry { padding: 0.8rem 0; border-bottom: 1px solid #eee; }
-    .time-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
-    .time { font-family: ui-monospace, monospace; font-weight: 500; flex: 1; }
-    .duration { color: #059669; font-size: 0.85rem; margin-left: 1.5rem; }
-    .note { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
-    .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .stamp-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    
+    #status { text-align: center; margin: 0.5rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
+    #errorMsg { color: #dc2626; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 6px; border-radius: 6px; border: 1px solid #fecaca; display: none; }
+    
+    .entries h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
+    .day-group { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; }
+    .day-total { color: #059669; font-size: 0.85rem; font-weight: 500; }
+    
+    .time-row { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0; font-size: 0.85rem; }
+    .time-label { color: #6b7280; width: 24px; }
+    .time-val { font-family: ui-monospace, monospace; font-weight: 500; flex: 1; }
+    .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 2px 4px; border-radius: 3px; font-size: 0.7rem; cursor: pointer; min-width: 20px; }
     .corr-btn:hover { background: #f59e0b; }
-    .loading { color: #888; font-size: 0.9rem; text-align: center; }
-    .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 8px; border-radius: 6px; border: 1px solid #fecaca; }
-    #debug { font-size: 0.75rem; color: #666; margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; display: none; }
+    
+    .note { color: #6b7280; font-size: 0.8rem; margin-left: 24px; }
+    .loading { color: #888; font-size: 0.85rem; text-align: center; padding: 1rem; }
+    #debug { font-size: 0.7rem; color: #666; margin-top: 1rem; border-top: 1px solid #eee; padding-top: 0.5rem; display: none; }
   </style>
 </head>
 <body>
   <div class="container">
     <h1>⏱ Zeiterfassung</h1>
-    <label for="employee">Mitarbeiter:</label>
-    <select id="employee"><option value="">-- Initialisiere --</option></select>
-    <div id="status" class="status">Bitte wählen</div>
-    <div id="errorMsg" class="error" style="display:none"></div>
-    <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
     
-    <label for="rangeFilter">Zeitraum:</label>
-    <select id="rangeFilter">
-      <option value="3">Letzte 3 Tage</option>
-      <option value="7" selected>Letzte 7 Tage</option>
-      <option value="30">Letzte 30 Tage</option>
-    </select>
+    <div class="row">
+      <label for="employee">Mitarbeiter:</label>
+      <select id="employee"><option value="">-- Bitte wählen --</option></select>
+      <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
+    </div>
+    
+    <div id="status">Bitte wählen</div>
+    <div id="errorMsg"></div>
+    
+    <div class="row">
+      <label for="rangeFilter">Zeitraum:</label>
+      <select id="rangeFilter" style="flex:1">
+        <option value="3">3 Tage</option>
+        <option value="7" selected>7 Tage</option>
+        <option value="30">30 Tage</option>
+      </select>
+    </div>
     
     <div class="entries">
       <h3>Einträge</h3>
@@ -54,8 +70,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
   <script>
-    const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; console.log(msg); };
-    const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; console.error(msg); };
+    const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
+    const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; };
 
     const firebaseConfig = {
       apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
@@ -66,12 +82,7 @@
       appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
     };
 
-    try {
-      firebase.initializeApp(firebaseConfig);
-    } catch(e) {
-      showError("Firebase Fehler: " + e.message);
-    }
-
+    firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
     db.settings({ ignoreUndefinedProperties: true });
 
@@ -85,15 +96,12 @@
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
 
-    sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
-      employees.map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.disabled = false;
 
     if(user && employees.includes(user)) {
       sel.value = user;
       loadUserState();
-    } else {
-      status.textContent = "Bitte Mitarbeiter wählen";
     }
 
     sel.addEventListener('change', () => {
@@ -107,21 +115,19 @@
       }
     });
 
-    rangeFilter.addEventListener('change', () => {
-      if(user) renderList(allEntries);
-    });
+    rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
 
     async function loadUserState() {
       if(!user) return;
       btn.disabled = true;
-      status.textContent = "Lade von Firebase...";
+      status.textContent = "Lade...";
       errorMsg.style.display = 'none';
 
       try {
         const snap = await db.collection('entries')
           .where('employee', '==', user)
           .orderBy('startTime', 'desc')
-          .limit(50)
+          .limit(100)
           .get();
         
         allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
@@ -129,12 +135,8 @@
         updateUI(last);
         renderList(allEntries);
       } catch(e) {
-        debug("❌ Firestore Fehler: " + e.message);
-        if(e.message.includes('index')) {
-          showError("⚠️ Index fehlt! Klicke auf den Link in der Browser-Console.");
-        } else {
-          showError("Fehler: " + e.message);
-        }
+        if(e.message.includes('index')) showError("⚠️ Index fehlt – Console-Link klicken");
+        else showError("Fehler: " + e.message);
         updateUI(null);
         renderList([]);
       }
@@ -146,142 +148,110 @@
         btn.classList.add('check-out');
         const start = last.startTime?.toDate?.() || new Date(last.startTime);
         const diff = Date.now() - start.getTime();
-        const h = Math.floor(diff / 3600000);
-        const m = Math.floor((diff % 3600000) / 60000);
+        const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000);
         status.textContent = `Aktiv seit ${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} (${h}h ${m}m)`;
       } else {
         btn.textContent = 'KOMMEN';
         btn.classList.remove('check-out');
-        status.textContent = 'Bereit zum Stempeln';
+        status.textContent = 'Bereit';
       }
       btn.disabled = false;
     }
 
-    function formatTime(date) {
-      if(!date) return '?';
-      return date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    function fmtTime(d) { return d ? d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
+    function fmtDate(d) { return d ? d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
+    function fmtKey(d) { return d ? d.toISOString().slice(0,10) : ''; }
+    function duration(start, end) {
+      if(!start || !end) return 0;
+      return Math.floor((end - start) / 60000);
     }
-
-    function formatDate(date) {
-      if(!date) return '';
-      return date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
+    function fmtDur(mins) {
+      const h = Math.floor(mins / 60), m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}min`;
     }
-
-    function calcDuration(start, end) {
-      if(!start || !end) return '';
-      const diff = end - start;
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      return `${h}h ${m}m`;
-    }
-
-    function isInRange(entryDate, days) {
-      if(!entryDate) return false;
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
-      return entryDate >= cutoff;
+    function inRange(date, days) {
+      if(!date) return false;
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
+      return date >= cutoff;
     }
 
     function renderList(entries) {
       if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
       
       const days = parseInt(rangeFilter.value);
-      const filtered = entries.filter(e => {
+      const byDay = {};
+      
+      entries.forEach(e => {
         const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
-        return isInRange(s, days);
+        if(!inRange(s, days)) return;
+        const key = fmtKey(s);
+        if(!byDay[key]) byDay[key] = { date: s, entries: [] };
+        byDay[key].entries.push(e);
       });
 
-      if(!filtered.length) { list.innerHTML = '<div class="loading">Keine Einträge im Zeitraum</div>'; return; }
+      if(!Object.keys(byDay).length) { list.innerHTML = '<div class="loading">Keine Einträge im Zeitraum</div>'; return; }
 
-      list.innerHTML = filtered.map(e => {
-        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
-        const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
-        const sStr = formatTime(s);
-        const eStr = en ? formatTime(en) : 'Offen';
-        const dateStr = s ? formatDate(s) : '';
-        const duration = en && s ? calcDuration(s, en) : '';
-        const sIso = s ? s.toISOString() : '';
-        const eIso = en ? en.toISOString() : '';
+      let html = '';
+      Object.values(byDay).sort((a,b) => b.date - a.date).forEach(day => {
+        let totalMins = 0;
+        const rows = day.entries.map(e => {
+          const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
+          const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
+          const mins = duration(s, en);
+          totalMins += mins;
+          const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
+          return `<div class="time-row">
+            <span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>
+            <button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>
+          </div>
+          <div class="time-row">
+            <span class="time-label">OUT</span><span class="time-val">${fmtTime(en)}</span>
+            <button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>
+          </div>`;
+        }).join('');
         
-        return `<div class="entry">
-          <div style="font-size:0.8rem;color:#888;margin-bottom:4px">${dateStr}</div>
-          <div class="time-row">
-            <span class="time">IN: ${sStr}</span>
-            <button class="corr-btn" data-id="${e.id}" data-field="startTime" data-value="${sIso}">✏️</button>
-          </div>
-          <div class="time-row">
-            <span class="time">OUT: ${eStr}</span>
-            <button class="corr-btn" data-id="${e.id}" data-field="endTime" data-value="${eIso}">✏️</button>
-          </div>
-          ${duration ? `<div class="duration">⏱ ${duration}</div>` : ''}
-          ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
+        html += `<div class="day-group">
+          <div class="day-header"><span>${fmtDate(day.date)}</span><span class="day-total">Σ ${fmtDur(totalMins)}</span></div>
+          ${rows}
+          ${day.entries[0].note ? `<div class="note">📝 ${day.entries[0].note}</div>` : ''}
         </div>`;
-      }).join('');
-
-      document.querySelectorAll('.corr-btn').forEach(btn => {
-        btn.onclick = (ev) => {
-          const id = ev.target.dataset.id;
-          const field = ev.target.dataset.field;
-          const value = ev.target.dataset.value;
-          correctTimestamp(id, field, value);
+      });
+      list.innerHTML = html;
+      
+      document.querySelectorAll('.corr-btn').forEach(b => {
+        b.onclick = (ev) => {
+          const id = ev.target.dataset.id, f = ev.target.dataset.f, v = ev.target.dataset.v;
+          correctTimestamp(id, f, v);
         };
       });
     }
 
-    async function correctTimestamp(entryId, field, isoValue) {
-      const baseDate = isoValue ? new Date(isoValue) : new Date();
-      const current = baseDate.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-      const input = prompt('Neuer Zeitpunkt (HH:MM):', current);
+    async function correctTimestamp(id, field, isoVal) {
+      const base = isoVal ? new Date(isoVal) : new Date();
+      const cur = base.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+      const input = prompt('Neue Zeit (HH:MM):', cur);
       if(!input) return;
-      
-      const [h, m] = input.split(':').map(Number);
-      if(isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-        alert('Ungültiges Format. Bitte HH:MM eingeben.');
-        return;
-      }
-      
-      const newDate = new Date(baseDate);
-      newDate.setHours(h, m, 0, 0);
-      
+      const [h,m] = input.split(':').map(Number);
+      if(isNaN(h)||isNaN(m)||h<0||h>23||m<0||m>59) { alert('Ungültig'); return; }
+      const newDate = new Date(base); newDate.setHours(h,m,0,0);
       try {
-        await db.collection('entries').doc(entryId).update({ [field]: newDate });
+        await db.collection('entries').doc(id).update({ [field]: newDate });
         await loadUserState();
-      } catch(e) {
-        showError('Korrektur fehlgeschlagen: ' + e.message);
-      }
+      } catch(e) { showError('Fehler: '+e.message); }
     }
 
     btn.addEventListener('click', async () => {
       if(!user) return;
-      btn.disabled = true;
-      status.textContent = 'Speichere...';
-      errorMsg.style.display = 'none';
-
+      btn.disabled = true; status.textContent = 'Speichere...'; errorMsg.style.display = 'none';
       try {
-        const snap = await db.collection('entries')
-          .where('employee', '==', user)
-          .where('endTime', '==', null)
-          .limit(1)
-          .get();
-
+        const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
         if(snap.empty) {
-          await db.collection('entries').add({
-            employee: user,
-            startTime: firebase.firestore.FieldValue.serverTimestamp(),
-            endTime: null,
-            note: '',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          await db.collection('entries').add({ employee:user, startTime:firebase.firestore.FieldValue.serverTimestamp(), endTime:null, note:'', createdAt:firebase.firestore.FieldValue.serverTimestamp() });
         } else {
-          await db.collection('entries').doc(snap.docs[0].id).update({
-            endTime: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          await db.collection('entries').doc(snap.docs[0].id).update({ endTime:firebase.firestore.FieldValue.serverTimestamp() });
         }
         await loadUserState();
-      } catch(e) {
-        showError("Speichern fehlgeschlagen: " + e.message);
-        btn.disabled = false;
-      }
+      } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
     });
   </script>
 </body>
