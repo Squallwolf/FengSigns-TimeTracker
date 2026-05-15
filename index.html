@@ -16,8 +16,12 @@
     .status { text-align: center; margin: 1rem 0; min-height: 1.4em; color: #4b5563; }
     .entries h3 { margin: 1.5rem 0 0.5rem; font-size: 1rem; }
     .entry { padding: 0.8rem 0; border-bottom: 1px solid #eee; }
-    .time { font-family: ui-monospace, monospace; font-weight: 500; }
+    .time-row { display: flex; align-items: center; gap: 0.5rem; margin: 0.25rem 0; }
+    .time { font-family: ui-monospace, monospace; font-weight: 500; flex: 1; }
+    .duration { color: #059669; font-size: 0.85rem; margin-left: 1.5rem; }
     .note { color: #6b7280; font-size: 0.85rem; margin-top: 4px; }
+    .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; }
+    .corr-btn:hover { background: #f59e0b; }
     .loading { color: #888; font-size: 0.9rem; text-align: center; }
     .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 8px; border-radius: 6px; border: 1px solid #fecaca; }
     #debug { font-size: 0.75rem; color: #666; margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; }
@@ -38,7 +42,6 @@
     <div id="debug"></div>
   </div>
 
-  <!-- Firebase SDK v10 Compat -->
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
@@ -66,7 +69,6 @@
     }
 
     const db = firebase.firestore();
-    // 🔧 Firestore Settings für lokale Entwicklung / CORS
     db.settings({ ignoreUndefinedProperties: true });
 
     const employees = ["Anna", "Ben", "Clara", "David"];
@@ -77,7 +79,6 @@
     const list = document.getElementById('entryList');
     let user = localStorage.getItem('tz_user') || '';
 
-    // ✅ Dropdown SOFORT befüllen (unabhängig von Firebase)
     debug("2. Befülle Dropdown mit: " + employees.join(", "));
     sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
       employees.map(n => `<option value="${n}">${n}</option>`).join('');
@@ -112,10 +113,9 @@
       debug("🔄 Firestore Query: entries where employee==" + user);
 
       try {
-        // 🔍 Query OHNE orderBy zuerst (vermeidet Index-Fehler beim ersten Mal)
         const snap = await db.collection('entries')
           .where('employee', '==', user)
-          .orderBy('startTime', 'desc') // Falls das fehlschlägt, siehe Hinweis unten
+          .orderBy('startTime', 'desc')
           .limit(10)
           .get();
         
@@ -130,7 +130,6 @@
         } else {
           showError("Fehler: " + e.message);
         }
-        // Fallback: Zeige leere Liste statt Crash
         updateUI(null, []);
       }
     }
@@ -153,17 +152,58 @@
       renderList(entries);
     }
 
+    function formatTime(date) {
+      if(!date) return '?';
+      return date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    }
+
+    function calcDuration(start, end) {
+      if(!start || !end) return '';
+      const diff = end - start;
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      return `${h}h ${m}m`;
+    }
+
+    async function correctTimestamp(entryId, field, currentValue) {
+      const input = prompt('Neuer Zeitpunkt (HH:MM):', currentValue);
+      if(!input) return;
+      const [h, m] = input.split(':').map(Number);
+      if(isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+        alert('Ungültiges Format');
+        return;
+      }
+      const baseDate = currentValue?.toDate?.() || new Date();
+      const newDate = new Date(baseDate);
+      newDate.setHours(h, m, 0, 0);
+      
+      try {
+        await db.collection('entries').doc(entryId).update({ [field]: newDate });
+        await loadUserState();
+      } catch(e) {
+        showError('Korrektur fehlgeschlagen: ' + e.message);
+      }
+    }
+
     function renderList(entries) {
       if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
       list.innerHTML = entries.map(e => {
-        // 🔧 Syntax-Fix: ?.toDate?.() statt ?.toDate?.?.()
         const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
         const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
+        const sStr = formatTime(s);
+        const eStr = en ? formatTime(en) : 'Offen';
+        const duration = en && s ? calcDuration(s, en) : '';
         return `<div class="entry">
-          <div>
-            <span class="time">${s ? s.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'} – ${en ? en.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : 'Offen'}</span>
-            ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
+          <div class="time-row">
+            <span class="time">IN: ${sStr}</span>
+            <button class="corr-btn" onclick="correctTimestamp('${e.id}','startTime',${JSON.stringify(e.startTime)})">✏️</button>
           </div>
+          <div class="time-row">
+            <span class="time">OUT: ${eStr}</span>
+            <button class="corr-btn" onclick="correctTimestamp('${e.id}','endTime',${JSON.stringify(e.endTime)})">✏️</button>
+          </div>
+          ${duration ? `<div class="duration">⏱ ${duration}</div>` : ''}
+          ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
         </div>`;
       }).join('');
     }
