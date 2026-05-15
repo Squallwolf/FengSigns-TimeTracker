@@ -24,7 +24,7 @@
     .corr-btn:hover { background: #f59e0b; }
     .loading { color: #888; font-size: 0.9rem; text-align: center; }
     .error { color: #dc2626; font-size: 0.9rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 8px; border-radius: 6px; border: 1px solid #fecaca; }
-    #debug { font-size: 0.75rem; color: #666; margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; }
+    #debug { font-size: 0.75rem; color: #666; margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; display: none; }
   </style>
 </head>
 <body>
@@ -35,8 +35,16 @@
     <div id="status" class="status">Bitte wählen</div>
     <div id="errorMsg" class="error" style="display:none"></div>
     <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
+    
+    <label for="rangeFilter">Zeitraum:</label>
+    <select id="rangeFilter">
+      <option value="3">Letzte 3 Tage</option>
+      <option value="7" selected>Letzte 7 Tage</option>
+      <option value="30">Letzte 30 Tage</option>
+    </select>
+    
     <div class="entries">
-      <h3>Letzte Einträge</h3>
+      <h3>Einträge</h3>
       <div id="entryList"><div class="loading">Warte auf Auswahl...</div></div>
     </div>
     <div id="debug"></div>
@@ -58,13 +66,9 @@
       appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf"
     };
 
-    debug("1. Starte Initialisierung...");
-
     try {
       firebase.initializeApp(firebaseConfig);
-      debug("✅ Firebase initialisiert");
     } catch(e) {
-      debug("❌ Firebase Init Fehler: " + e.message);
       showError("Firebase Fehler: " + e.message);
     }
 
@@ -77,17 +81,16 @@
     const status = document.getElementById('status');
     const errorMsg = document.getElementById('errorMsg');
     const list = document.getElementById('entryList');
+    const rangeFilter = document.getElementById('rangeFilter');
     let user = localStorage.getItem('tz_user') || '';
+    let allEntries = [];
 
-    debug("2. Befülle Dropdown mit: " + employees.join(", "));
     sel.innerHTML = '<option value="">-- Bitte wählen --</option>' +
       employees.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.disabled = false;
-    debug("✅ Dropdown bereit");
 
     if(user && employees.includes(user)) {
       sel.value = user;
-      debug("3. Lade State für: " + user);
       loadUserState();
     } else {
       status.textContent = "Bitte Mitarbeiter wählen";
@@ -96,7 +99,6 @@
     sel.addEventListener('change', () => {
       user = sel.value;
       localStorage.setItem('tz_user', user);
-      debug("User geändert zu: " + user);
       if(user) loadUserState();
       else {
         btn.disabled = true;
@@ -105,36 +107,40 @@
       }
     });
 
+    rangeFilter.addEventListener('change', () => {
+      if(user) renderList(allEntries);
+    });
+
     async function loadUserState() {
       if(!user) return;
       btn.disabled = true;
       status.textContent = "Lade von Firebase...";
       errorMsg.style.display = 'none';
-      debug("🔄 Firestore Query: entries where employee==" + user);
 
       try {
         const snap = await db.collection('entries')
           .where('employee', '==', user)
           .orderBy('startTime', 'desc')
-          .limit(10)
+          .limit(50)
           .get();
         
-        debug(`✅ Geladen: ${snap.size} Einträge`);
-        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        const last = entries[0] || null;
-        updateUI(last, entries);
+        allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        const last = allEntries[0] || null;
+        updateUI(last);
+        renderList(allEntries);
       } catch(e) {
         debug("❌ Firestore Fehler: " + e.message);
         if(e.message.includes('index')) {
-          showError("⚠️ Index fehlt! Klicke auf den Link in der Browser-Console, um ihn zu erstellen.");
+          showError("⚠️ Index fehlt! Klicke auf den Link in der Browser-Console.");
         } else {
           showError("Fehler: " + e.message);
         }
-        updateUI(null, []);
+        updateUI(null);
+        renderList([]);
       }
     }
 
-    function updateUI(last, entries) {
+    function updateUI(last) {
       if(last && !last.endTime) {
         btn.textContent = 'GEHEN';
         btn.classList.add('check-out');
@@ -149,12 +155,16 @@
         status.textContent = 'Bereit zum Stempeln';
       }
       btn.disabled = false;
-      renderList(entries);
     }
 
     function formatTime(date) {
       if(!date) return '?';
       return date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+    }
+
+    function formatDate(date) {
+      if(!date) return '';
+      return date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'});
     }
 
     function calcDuration(start, end) {
@@ -165,15 +175,71 @@
       return `${h}h ${m}m`;
     }
 
-    async function correctTimestamp(entryId, field, currentValue) {
-      const input = prompt('Neuer Zeitpunkt (HH:MM):', currentValue);
+    function isInRange(entryDate, days) {
+      if(!entryDate) return false;
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      return entryDate >= cutoff;
+    }
+
+    function renderList(entries) {
+      if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
+      
+      const days = parseInt(rangeFilter.value);
+      const filtered = entries.filter(e => {
+        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
+        return isInRange(s, days);
+      });
+
+      if(!filtered.length) { list.innerHTML = '<div class="loading">Keine Einträge im Zeitraum</div>'; return; }
+
+      list.innerHTML = filtered.map(e => {
+        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
+        const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
+        const sStr = formatTime(s);
+        const eStr = en ? formatTime(en) : 'Offen';
+        const dateStr = s ? formatDate(s) : '';
+        const duration = en && s ? calcDuration(s, en) : '';
+        const sIso = s ? s.toISOString() : '';
+        const eIso = en ? en.toISOString() : '';
+        
+        return `<div class="entry">
+          <div style="font-size:0.8rem;color:#888;margin-bottom:4px">${dateStr}</div>
+          <div class="time-row">
+            <span class="time">IN: ${sStr}</span>
+            <button class="corr-btn" data-id="${e.id}" data-field="startTime" data-value="${sIso}">✏️</button>
+          </div>
+          <div class="time-row">
+            <span class="time">OUT: ${eStr}</span>
+            <button class="corr-btn" data-id="${e.id}" data-field="endTime" data-value="${eIso}">✏️</button>
+          </div>
+          ${duration ? `<div class="duration">⏱ ${duration}</div>` : ''}
+          ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      document.querySelectorAll('.corr-btn').forEach(btn => {
+        btn.onclick = (ev) => {
+          const id = ev.target.dataset.id;
+          const field = ev.target.dataset.field;
+          const value = ev.target.dataset.value;
+          correctTimestamp(id, field, value);
+        };
+      });
+    }
+
+    async function correctTimestamp(entryId, field, isoValue) {
+      const baseDate = isoValue ? new Date(isoValue) : new Date();
+      const current = baseDate.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
+      const input = prompt('Neuer Zeitpunkt (HH:MM):', current);
       if(!input) return;
+      
       const [h, m] = input.split(':').map(Number);
       if(isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-        alert('Ungültiges Format');
+        alert('Ungültiges Format. Bitte HH:MM eingeben.');
         return;
       }
-      const baseDate = currentValue?.toDate?.() || new Date();
+      
       const newDate = new Date(baseDate);
       newDate.setHours(h, m, 0, 0);
       
@@ -185,35 +251,11 @@
       }
     }
 
-    function renderList(entries) {
-      if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
-      list.innerHTML = entries.map(e => {
-        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
-        const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
-        const sStr = formatTime(s);
-        const eStr = en ? formatTime(en) : 'Offen';
-        const duration = en && s ? calcDuration(s, en) : '';
-        return `<div class="entry">
-          <div class="time-row">
-            <span class="time">IN: ${sStr}</span>
-            <button class="corr-btn" onclick="correctTimestamp('${e.id}','startTime',${JSON.stringify(e.startTime)})">✏️</button>
-          </div>
-          <div class="time-row">
-            <span class="time">OUT: ${eStr}</span>
-            <button class="corr-btn" onclick="correctTimestamp('${e.id}','endTime',${JSON.stringify(e.endTime)})">✏️</button>
-          </div>
-          ${duration ? `<div class="duration">⏱ ${duration}</div>` : ''}
-          ${e.note ? `<div class="note">📝 ${e.note}</div>` : ''}
-        </div>`;
-      }).join('');
-    }
-
     btn.addEventListener('click', async () => {
       if(!user) return;
       btn.disabled = true;
       status.textContent = 'Speichere...';
       errorMsg.style.display = 'none';
-      debug("📤 Speichere Stempelung für: " + user);
 
       try {
         const snap = await db.collection('entries')
@@ -223,7 +265,6 @@
           .get();
 
         if(snap.empty) {
-          debug("→ Neuer Check-in");
           await db.collection('entries').add({
             employee: user,
             startTime: firebase.firestore.FieldValue.serverTimestamp(),
@@ -232,21 +273,16 @@
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           });
         } else {
-          debug("→ Check-out für Doc: " + snap.docs[0].id);
           await db.collection('entries').doc(snap.docs[0].id).update({
             endTime: firebase.firestore.FieldValue.serverTimestamp()
           });
         }
-        debug("✅ Speichern erfolgreich");
         await loadUserState();
       } catch(e) {
-        debug("❌ Speichern Fehler: " + e.message);
         showError("Speichern fehlgeschlagen: " + e.message);
         btn.disabled = false;
       }
     });
-
-    debug("🏁 Initialisierung abgeschlossen");
   </script>
 </body>
 </html>
