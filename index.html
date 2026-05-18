@@ -13,12 +13,11 @@
     h1 { text-align: center; font-size: 1.3rem; margin: 0 0 0.75rem; }
     .top-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .nav-btn { flex: 1; padding: 10px; border: 1px solid #ccc; background: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #333; font-size: 0.95rem; }
-    .nav-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
     .nav-btn:hover { filter: brightness(0.95); }
     .export-wrapper { position: relative; flex: 1; }
     .export-btn { width: 100%; padding: 10px; border: none; background: #2563eb; color: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; }
     .export-btn:hover { filter: brightness(0.95); }
-    .export-arrow { margin-left: 8px; font-size: 0.7rem; transition: transform 0.2s; }
+    .export-arrow { margin-left: 8px; font-size: 0.7rem; transition: transform 0.2s; padding: 4px; }
     .export-arrow.open { transform: rotate(180deg); }
     .export-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; display: none; }
     .export-dropdown.show { display: block; }
@@ -112,7 +111,7 @@
     const db = firebase.firestore();
     db.settings({ ignoreUndefinedProperties: true });
 
-    const employees = ["Anna", "Ben", "Clara", "David"];
+    const employees = ["Andrea", "Leonie", "Natalie", "Rebekka", "Stephan"];
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
@@ -141,10 +140,17 @@
     });
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
 
+    // Pfeil-Klick: Dropdown togglen
+    exportArrow.addEventListener('click', (e) => {
+      e.stopPropagation();
+      exportDropdown.classList.toggle('show');
+      exportArrow.classList.toggle('open');
+    });
+
+    // Button-Klick (außer Pfeil): Export starten
     exportBtn.addEventListener('click', (e) => {
-      if(e.target === exportBtn || e.target === exportArrow) {
-        exportDropdown.classList.toggle('show');
-        exportArrow.classList.toggle('open');
+      if (e.target !== exportArrow) {
+        exportData(selectedFormat);
       }
     });
 
@@ -159,7 +165,7 @@
     });
 
     document.addEventListener('click', (e) => {
-      if(!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) {
+      if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) {
         exportDropdown.classList.remove('show');
         exportArrow.classList.remove('open');
       }
@@ -350,6 +356,7 @@
     async function exportData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
       exportBtn.disabled = true; 
+      exportBtn.querySelector('span').textContent = 'Erstelle...';
       
       try {
         const now = new Date();
@@ -454,11 +461,8 @@
         showError("Export-Fehler: "+e.message);
       }
       exportBtn.disabled = false;
+      exportBtn.querySelector('span').textContent = 'Monatsauswertung';
     }
-
-    exportBtn.querySelector('.export-btn').addEventListener('click', () => {
-      exportData(selectedFormat);
-    });
   </script>
 </body>
 </html>
