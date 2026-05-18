@@ -20,11 +20,14 @@
     
     #status { text-align: center; margin: 0.5rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
     #errorMsg { color: #dc2626; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 6px; border-radius: 6px; border: 1px solid #fecaca; display: none; }
+    #warningMsg { color: #b45309; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fff7ed; padding: 6px; border-radius: 6px; border: 1px solid #fed7aa; display: none; }
     
     .entries h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
     .day-group { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-    .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; }
-    .day-total { color: #059669; font-size: 0.85rem; font-weight: 500; }
+    .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
+    .day-total { font-size: 0.85rem; font-weight: 500; }
+    .day-total.legal { color: #059669; }
+    .day-total.adjusted { color: #dc2626; }
     
     .time-row { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0; font-size: 0.85rem; }
     .time-label { color: #6b7280; width: 24px; }
@@ -32,6 +35,8 @@
     .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 2px 4px; border-radius: 3px; font-size: 0.7rem; cursor: pointer; min-width: 20px; }
     .corr-btn:hover { background: #f59e0b; }
     
+    .break-info { font-size: 0.8rem; color: #059669; margin: 0.2rem 0 0.2rem 24px; }
+    .break-warning { font-size: 0.8rem; color: #dc2626; margin: 0.2rem 0 0.2rem 24px; }
     .note { color: #6b7280; font-size: 0.8rem; margin-left: 24px; }
     .loading { color: #888; font-size: 0.85rem; text-align: center; padding: 1rem; }
     #debug { font-size: 0.7rem; color: #666; margin-top: 1rem; border-top: 1px solid #eee; padding-top: 0.5rem; display: none; }
@@ -49,6 +54,7 @@
     
     <div id="status">Bitte wählen</div>
     <div id="errorMsg"></div>
+    <div id="warningMsg"></div>
     
     <div class="row">
       <label for="rangeFilter">Zeitraum:</label>
@@ -72,6 +78,7 @@
   <script>
     const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
     const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; };
+    const showWarning = (msg) => { const el = document.getElementById('warningMsg'); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); };
 
     const firebaseConfig = {
       apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8",
@@ -91,93 +98,96 @@
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
     const errorMsg = document.getElementById('errorMsg');
+    const warningMsg = document.getElementById('warningMsg');
     const list = document.getElementById('entryList');
     const rangeFilter = document.getElementById('rangeFilter');
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
+    let dayBreakDeficits = {}; // { dateKey: missingMinutes }
 
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.disabled = false;
 
-    if(user && employees.includes(user)) {
-      sel.value = user;
-      loadUserState();
-    }
+    if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
 
     sel.addEventListener('change', () => {
-      user = sel.value;
-      localStorage.setItem('tz_user', user);
+      user = sel.value; localStorage.setItem('tz_user', user);
       if(user) loadUserState();
-      else {
-        btn.disabled = true;
-        status.textContent = "Bitte wählen";
-        list.innerHTML = '<div class="loading">Warte auf Auswahl...</div>';
-      }
+      else { btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; }
     });
-
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
+
+    function isSameDay(d1, d2) { return d1.getFullYear()===d2.getFullYear() && d1.getMonth()===d2.getMonth() && d1.getDate()===d2.getDate(); }
+    function fmtTime(d) { return d ? d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
+    function fmtDate(d) { return d ? d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
+    function fmtKey(d) { return d ? d.toISOString().slice(0,10) : ''; }
+    function msToMin(ms) { return Math.floor(ms/60000); }
+    function fmtDur(mins) { const h=Math.floor(mins/60), m=mins%60; return h>0?`${h}h ${m}m`:`${m}min`; }
+    function inRange(date, days) { if(!date)return false; const c=new Date(); c.setDate(c.getDate()-days); return date>=c; }
+
+    function getRequiredBreak(workMinutes) {
+      if (workMinutes >= 540) return 45; // ≥9h → 45min
+      if (workMinutes >= 360) return 30; // ≥6h → 30min
+      return 0;
+    }
+
+    function analyzeDay(entries) {
+      let workMin = 0, breakMin = 0;
+      const pairs = [];
+      for(let i=0; i<entries.length; i+=2) {
+        if(!entries[i+1]) break; // ignore open IN
+        const s = entries[i].startTime?.toDate?.() || new Date(entries[i].startTime);
+        const e = entries[i+1].endTime?.toDate?.() || new Date(entries[i+1].endTime);
+        workMin += msToMin(e - s);
+        pairs.push({s, e});
+      }
+      for(let i=0; i<pairs.length-1; i++) {
+        breakMin += msToMin(pairs[i+1].s - pairs[i].e);
+      }
+      const req = getRequiredBreak(workMin);
+      const deficit = Math.max(0, req - breakMin);
+      return { workMin, breakMin, req, deficit, hasBreak: breakMin > 0 };
+    }
 
     async function loadUserState() {
       if(!user) return;
-      btn.disabled = true;
-      status.textContent = "Lade...";
-      errorMsg.style.display = 'none';
-
+      btn.disabled = true; status.textContent = "Lade..."; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
       try {
-        const snap = await db.collection('entries')
-          .where('employee', '==', user)
-          .orderBy('startTime', 'desc')
-          .limit(100)
-          .get();
-        
+        const snap = await db.collection('entries').where('employee','==',user).orderBy('startTime','desc').limit(100).get();
         allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
         const last = allEntries[0] || null;
+
+        if (last && !last.endTime) {
+          const start = last.startTime?.toDate?.() || new Date(last.startTime);
+          if (!isSameDay(start, new Date())) {
+            const endTime = new Date(start.getTime() + 60000);
+            await db.collection('entries').doc(last.id).update({ endTime });
+            showWarning("⚠️ Offene Buchung vom Vortag wurde automatisch beendet (+1 Min).");
+            await loadUserState(); return;
+          }
+        }
+
         updateUI(last);
         renderList(allEntries);
       } catch(e) {
-        if(e.message.includes('index')) showError("⚠️ Index fehlt – Console-Link klicken");
-        else showError("Fehler: " + e.message);
-        updateUI(null);
-        renderList([]);
+        if(e.message.includes('index')) showError("⚠️ Index fehlt"); else showError("Fehler: "+e.message);
+        updateUI(null); renderList([]);
       }
     }
 
     function updateUI(last) {
       if(last && !last.endTime) {
-        btn.textContent = 'GEHEN';
-        btn.classList.add('check-out');
+        btn.textContent = 'GEHEN'; btn.classList.add('check-out');
         const start = last.startTime?.toDate?.() || new Date(last.startTime);
         const diff = Date.now() - start.getTime();
-        const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000);
-        status.textContent = `Aktiv seit ${start.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})} (${h}h ${m}m)`;
-      } else {
-        btn.textContent = 'KOMMEN';
-        btn.classList.remove('check-out');
-        status.textContent = 'Bereit';
-      }
+        status.textContent = `Aktiv seit ${fmtTime(start)} (${fmtDur(msToMin(diff))})`;
+      } else { btn.textContent = 'KOMMEN'; btn.classList.remove('check-out'); status.textContent = 'Bereit'; }
       btn.disabled = false;
-    }
-
-    function fmtTime(d) { return d ? d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
-    function fmtDate(d) { return d ? d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
-    function fmtKey(d) { return d ? d.toISOString().slice(0,10) : ''; }
-    function duration(start, end) {
-      if(!start || !end) return 0;
-      return Math.floor((end - start) / 60000);
-    }
-    function fmtDur(mins) {
-      const h = Math.floor(mins / 60), m = mins % 60;
-      return h > 0 ? `${h}h ${m}m` : `${m}min`;
-    }
-    function inRange(date, days) {
-      if(!date) return false;
-      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - days);
-      return date >= cutoff;
     }
 
     function renderList(entries) {
       if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
-      
+      dayBreakDeficits = {};
       const days = parseInt(rangeFilter.value);
       const byDay = {};
       
@@ -193,36 +203,48 @@
 
       let html = '';
       Object.values(byDay).sort((a,b) => b.date - a.date).forEach(day => {
-        let totalMins = 0;
+        day.entries.sort((a,b) => (a.startTime?.toDate?.() || new Date(a.startTime)) - (b.startTime?.toDate?.() || new Date(b.startTime)));
+        const stats = analyzeDay(day.entries);
+        dayBreakDeficits[fmtKey(day.date)] = stats.deficit;
+
+        let totalMin = stats.workMin;
+        let totalHtml = `<span class="day-total legal">Σ ${fmtDur(totalMin)}</span>`;
+        let breakHtml = '';
+        if(stats.req > 0) {
+          breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">🕒 Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (−'+stats.deficit+'min)' : ' ✓'}</div>`;
+        }
+
         const rows = day.entries.map(e => {
-          const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
+          const s = e.startTime?.toDate?.() || new Date(e.startTime);
           const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
-          const mins = duration(s, en);
-          totalMins += mins;
-          const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
+          const sIso = s.toISOString(), eIso = en ? en.toISOString() : '';
           return `<div class="time-row">
             <span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>
             <button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>
           </div>
           <div class="time-row">
-            <span class="time-label">OUT</span><span class="time-val">${fmtTime(en)}</span>
+            <span class="time-label">OUT</span><span class="time-val">${en ? fmtTime(en) : 'Offen'}</span>
             <button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>
           </div>`;
         }).join('');
         
+        // If previous day had deficit, show note
+        const prevKey = Object.keys(byDay).find(k => k < fmtKey(day.date));
+        const prevDeficit = prevKey ? dayBreakDeficits[prevKey] : 0;
+        const legalNote = prevDeficit > 0 ? `<div class="break-warning">⚖️ Vorheriger Tag: ${prevDeficit}min gesetzl. Pause abgezogen</div>` : '';
+
         html += `<div class="day-group">
-          <div class="day-header"><span>${fmtDate(day.date)}</span><span class="day-total">Σ ${fmtDur(totalMins)}</span></div>
+          <div class="day-header"><span>${fmtDate(day.date)}</span>${totalHtml}</div>
+          ${legalNote}
           ${rows}
-          ${day.entries[0].note ? `<div class="note">📝 ${day.entries[0].note}</div>` : ''}
+          ${breakHtml}
+          ${day.entries[0]?.note ? `<div class="note">📝 ${day.entries[0].note}</div>` : ''}
         </div>`;
       });
       list.innerHTML = html;
       
       document.querySelectorAll('.corr-btn').forEach(b => {
-        b.onclick = (ev) => {
-          const id = ev.target.dataset.id, f = ev.target.dataset.f, v = ev.target.dataset.v;
-          correctTimestamp(id, f, v);
-        };
+        b.onclick = (ev) => { const id=ev.target.dataset.id, f=ev.target.dataset.f, v=ev.target.dataset.v; correctTimestamp(id, f, v); };
       });
     }
 
@@ -234,21 +256,57 @@
       const [h,m] = input.split(':').map(Number);
       if(isNaN(h)||isNaN(m)||h<0||h>23||m<0||m>59) { alert('Ungültig'); return; }
       const newDate = new Date(base); newDate.setHours(h,m,0,0);
-      try {
-        await db.collection('entries').doc(id).update({ [field]: newDate });
-        await loadUserState();
-      } catch(e) { showError('Fehler: '+e.message); }
+      try { await db.collection('entries').doc(id).update({[field]:newDate}); await loadUserState(); }
+      catch(e) { showError('Fehler: '+e.message); }
     }
 
     btn.addEventListener('click', async () => {
       if(!user) return;
-      btn.disabled = true; status.textContent = 'Speichere...'; errorMsg.style.display = 'none';
+      btn.disabled = true; status.textContent = 'Speichere...'; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
       try {
         const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
+        
         if(snap.empty) {
-          await db.collection('entries').add({ employee:user, startTime:firebase.firestore.FieldValue.serverTimestamp(), endTime:null, note:'', createdAt:firebase.firestore.FieldValue.serverTimestamp() });
+          // KOMMEN: Prüfe vorherigen Tag auf Pausendefizit
+          const todayKey = fmtKey(new Date());
+          const todayEntries = allEntries.filter(e => fmtKey(e.startTime) === todayKey);
+          if(todayEntries.length === 0) {
+            // Finde letzten Arbeitstag
+            const prevDayKey = Object.keys(dayBreakDeficits).sort().reverse().find(k => k !== todayKey);
+            if(prevDayKey && dayBreakDeficits[prevDayKey] > 0) {
+              showWarning(`⚖️ Hinweis: Am ${prevDayKey.replace(/-/g,'.')} fehlten ${dayBreakDeficits[prevDayKey]}min Pause. Werden gesetzlich abgezogen.`);
+            }
+          }
+          await db.collection('entries').add({ employee:user, startTime:new Date(), endTime:null, note:'', createdAt:new Date() });
         } else {
-          await db.collection('entries').doc(snap.docs[0].id).update({ endTime:firebase.firestore.FieldValue.serverTimestamp() });
+          // GEHEN: Prüfe Pausenlänge am heutigen Tag
+          const doc = snap.docs[0];
+          const proposedEnd = new Date();
+          const todayEntries = allEntries.filter(e => isSameDay(e.startTime?.toDate?.()||new Date(e.startTime), new Date())).sort((a,b)=>a.startTime-b.startTime);
+          
+          let finalEnd = proposedEnd;
+          const openInIdx = todayEntries.findIndex(e => e.id === doc.id);
+          if(openInIdx >= 2) { // Mindestens 1 Paar abgeschlossen → dies ist 2. OUT
+            const prevOut = todayEntries[openInIdx-1].endTime?.toDate?.() || new Date(todayEntries[openInIdx-1].endTime);
+            const curIn = todayEntries[openInIdx-1].endTime ? todayEntries[openInIdx].startTime?.toDate?.() || new Date(todayEntries[openInIdx].startTime) : null;
+            // Berechne Pause zwischen letztem OUT und aktuellem IN
+            if(curIn && prevOut) {
+              const actualBreak = msToMin(curIn - prevOut);
+              // Simuliere Gesamtarbeitszeit mit neuem OUT
+              let simWorkMin = 0;
+              for(let i=0; i<todayEntries.length; i+=2) {
+                if(i===openInIdx-1) { simWorkMin += msToMin(finalEnd - (todayEntries[i].startTime?.toDate?.()||new Date(todayEntries[i].startTime))); }
+                else if(todayEntries[i+1]) { simWorkMin += msToMin((todayEntries[i+1].endTime?.toDate?.()||new Date(todayEntries[i+1].endTime)) - (todayEntries[i].startTime?.toDate?.()||new Date(todayEntries[i].startTime))); }
+              }
+              const req = getRequiredBreak(simWorkMin);
+              const deficit = Math.max(0, req - actualBreak);
+              if(deficit > 0) {
+                finalEnd = new Date(finalEnd.getTime() + deficit*60000);
+                showWarning(`⚖️ Pause war zu kurz (${fmtDur(actualBreak)} vs ${fmtDur(req)}). OUT wurde um ${deficit}min verlängert.`);
+              }
+            }
+          }
+          await db.collection('entries').doc(doc.id).update({ endTime: finalEnd });
         }
         await loadUserState();
       } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
