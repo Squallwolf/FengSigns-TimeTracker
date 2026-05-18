@@ -27,7 +27,6 @@
     .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
     .day-total { font-size: 0.85rem; font-weight: 500; }
     .day-total.legal { color: #059669; }
-    .day-total.adjusted { color: #dc2626; }
     
     .time-row { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0; font-size: 0.85rem; }
     .time-label { color: #6b7280; width: 24px; }
@@ -44,7 +43,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>⏱ Zeiterfassung</h1>
+    <h1>Zeiterfassung</h1>
     
     <div class="row">
       <label for="employee">Mitarbeiter:</label>
@@ -103,7 +102,8 @@
     const rangeFilter = document.getElementById('rangeFilter');
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
-    let dayBreakDeficits = {}; // { dateKey: missingMinutes }
+    let dayBreakDeficits = {};
+    const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
 
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.disabled = false;
@@ -126,8 +126,8 @@
     function inRange(date, days) { if(!date)return false; const c=new Date(); c.setDate(c.getDate()-days); return date>=c; }
 
     function getRequiredBreak(workMinutes) {
-      if (workMinutes >= 540) return 45; // ≥9h → 45min
-      if (workMinutes >= 360) return 30; // ≥6h → 30min
+      if (workMinutes >= 540) return 45;
+      if (workMinutes >= 360) return 30;
       return 0;
     }
 
@@ -135,7 +135,7 @@
       let workMin = 0, breakMin = 0;
       const pairs = [];
       for(let i=0; i<entries.length; i+=2) {
-        if(!entries[i+1]) break; // ignore open IN
+        if(!entries[i+1]) break;
         const s = entries[i].startTime?.toDate?.() || new Date(entries[i].startTime);
         const e = entries[i+1].endTime?.toDate?.() || new Date(entries[i+1].endTime);
         workMin += msToMin(e - s);
@@ -170,7 +170,11 @@
         updateUI(last);
         renderList(allEntries);
       } catch(e) {
-        if(e.message.includes('index')) showError("⚠️ Index fehlt"); else showError("Fehler: "+e.message);
+        if(e.message.includes('index')) {
+          showError("⚠️ Firestore-Index fehlt. Bitte den Link in der Browser-Console öffnen, um ihn anzulegen.");
+        } else {
+          showError("Fehler: "+e.message);
+        }
         updateUI(null); renderList([]);
       }
     }
@@ -211,7 +215,7 @@
         let totalHtml = `<span class="day-total legal">Σ ${fmtDur(totalMin)}</span>`;
         let breakHtml = '';
         if(stats.req > 0) {
-          breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">🕒 Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (−'+stats.deficit+'min)' : ' ✓'}</div>`;
+          breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (-'+stats.deficit+'min)' : ' (OK)'}</div>`;
         }
 
         const rows = day.entries.map(e => {
@@ -228,17 +232,16 @@
           </div>`;
         }).join('');
         
-        // If previous day had deficit, show note
         const prevKey = Object.keys(byDay).find(k => k < fmtKey(day.date));
         const prevDeficit = prevKey ? dayBreakDeficits[prevKey] : 0;
-        const legalNote = prevDeficit > 0 ? `<div class="break-warning">⚖️ Vorheriger Tag: ${prevDeficit}min gesetzl. Pause abgezogen</div>` : '';
+        const legalNote = prevDeficit > 0 ? `<div class="break-warning">Hinweis: Vorheriger Tag: ${prevDeficit}min gesetzl. Pause abgezogen</div>` : '';
 
         html += `<div class="day-group">
           <div class="day-header"><span>${fmtDate(day.date)}</span>${totalHtml}</div>
           ${legalNote}
           ${rows}
           ${breakHtml}
-          ${day.entries[0]?.note ? `<div class="note">📝 ${day.entries[0].note}</div>` : ''}
+          ${day.entries[0]?.note ? `<div class="note">Notiz: ${day.entries[0].note}</div>` : ''}
         </div>`;
       });
       list.innerHTML = html;
@@ -267,32 +270,33 @@
         const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
         
         if(snap.empty) {
-          // KOMMEN: Prüfe vorherigen Tag auf Pausendefizit
           const todayKey = fmtKey(new Date());
           const todayEntries = allEntries.filter(e => fmtKey(e.startTime) === todayKey);
           if(todayEntries.length === 0) {
-            // Finde letzten Arbeitstag
             const prevDayKey = Object.keys(dayBreakDeficits).sort().reverse().find(k => k !== todayKey);
             if(prevDayKey && dayBreakDeficits[prevDayKey] > 0) {
-              showWarning(`⚖️ Hinweis: Am ${prevDayKey.replace(/-/g,'.')} fehlten ${dayBreakDeficits[prevDayKey]}min Pause. Werden gesetzlich abgezogen.`);
+              showWarning("Hinweis: Am " + prevDayKey.replace(/-/g,'.') + " fehlten " + dayBreakDeficits[prevDayKey] + "min Pause. Werden gesetzlich abgezogen.");
             }
           }
-          await db.collection('entries').add({ employee:user, startTime:new Date(), endTime:null, note:'', createdAt:new Date() });
+          await db.collection('entries').add({ 
+            employee:user, 
+            startTime: serverTimestamp(), 
+            endTime:null, 
+            note:'', 
+            createdAt: serverTimestamp() 
+          });
         } else {
-          // GEHEN: Prüfe Pausenlänge am heutigen Tag
           const doc = snap.docs[0];
           const proposedEnd = new Date();
-          const todayEntries = allEntries.filter(e => isSameDay(e.startTime?.toDate?.()||new Date(e.startTime), new Date())).sort((a,b)=>a.startTime-b.startTime);
+          const todayEntries = allEntries.filter(e => isSameDay(e.startTime?.toDate?.()||new Date(e.startTime), new Date())).sort((a,b)=>(a.startTime||0)-(b.startTime||0));
           
           let finalEnd = proposedEnd;
           const openInIdx = todayEntries.findIndex(e => e.id === doc.id);
-          if(openInIdx >= 2) { // Mindestens 1 Paar abgeschlossen → dies ist 2. OUT
+          if(openInIdx >= 2) {
             const prevOut = todayEntries[openInIdx-1].endTime?.toDate?.() || new Date(todayEntries[openInIdx-1].endTime);
-            const curIn = todayEntries[openInIdx-1].endTime ? todayEntries[openInIdx].startTime?.toDate?.() || new Date(todayEntries[openInIdx].startTime) : null;
-            // Berechne Pause zwischen letztem OUT und aktuellem IN
+            const curIn = todayEntries[openInIdx].startTime?.toDate?.() || new Date(todayEntries[openInIdx].startTime);
             if(curIn && prevOut) {
               const actualBreak = msToMin(curIn - prevOut);
-              // Simuliere Gesamtarbeitszeit mit neuem OUT
               let simWorkMin = 0;
               for(let i=0; i<todayEntries.length; i+=2) {
                 if(i===openInIdx-1) { simWorkMin += msToMin(finalEnd - (todayEntries[i].startTime?.toDate?.()||new Date(todayEntries[i].startTime))); }
@@ -302,7 +306,7 @@
               const deficit = Math.max(0, req - actualBreak);
               if(deficit > 0) {
                 finalEnd = new Date(finalEnd.getTime() + deficit*60000);
-                showWarning(`⚖️ Pause war zu kurz (${fmtDur(actualBreak)} vs ${fmtDur(req)}). OUT wurde um ${deficit}min verlängert.`);
+                showWarning("⚠️ Pause war zu kurz (" + fmtDur(actualBreak) + " vs " + fmtDur(req) + "). OUT wurde um " + deficit + "min verlängert.");
               }
             }
           }
