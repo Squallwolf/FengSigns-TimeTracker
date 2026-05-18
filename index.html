@@ -4,36 +4,35 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Zeiterfassung</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; color: #222; }
     .container { max-width: 420px; margin: 0 auto; background: #fff; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-    h1 { text-align: center; font-size: 1.3rem; margin: 0 0 1rem; }
-    
+    h1 { text-align: center; font-size: 1.3rem; margin: 0 0 0.75rem; }
+    .top-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .nav-btn { flex: 1; padding: 10px; border: 1px solid #ccc; background: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #333; font-size: 0.95rem; }
+    .nav-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    .nav-btn:hover { filter: brightness(0.95); }
     .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
     .row label { margin: 0; white-space: nowrap; font-weight: 500; font-size: 0.9rem; }
     .row select { flex: 1; padding: 8px; font-size: 0.95rem; border-radius: 8px; border: 1px solid #ccc; }
     .row button { padding: 8px 12px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; }
-    
     .stamp-btn { background: #2563eb; color: #fff; }
     .stamp-btn.check-out { background: #dc2626; }
     .stamp-btn:disabled { background: #94a3b8; cursor: not-allowed; }
-    
     #status { text-align: center; margin: 0.5rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
     #errorMsg { color: #dc2626; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 6px; border-radius: 6px; border: 1px solid #fecaca; display: none; }
     #warningMsg { color: #b45309; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fff7ed; padding: 6px; border-radius: 6px; border: 1px solid #fed7aa; display: none; }
-    
     .entries h3 { margin: 1rem 0 0.5rem; font-size: 1rem; }
     .day-group { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
     .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
-    .day-total { font-size: 0.85rem; font-weight: 500; }
-    .day-total.legal { color: #059669; }
-    
+    .day-total { font-size: 0.85rem; font-weight: 500; color: #059669; }
     .time-row { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0; font-size: 0.85rem; }
     .time-label { color: #6b7280; width: 24px; }
     .time-val { font-family: ui-monospace, monospace; font-weight: 500; flex: 1; }
     .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 2px 4px; border-radius: 3px; font-size: 0.7rem; cursor: pointer; min-width: 20px; }
     .corr-btn:hover { background: #f59e0b; }
-    
     .break-info { font-size: 0.8rem; color: #059669; margin: 0.2rem 0 0.2rem 24px; }
     .break-warning { font-size: 0.8rem; color: #dc2626; margin: 0.2rem 0 0.2rem 24px; }
     .note { color: #6b7280; font-size: 0.8rem; margin-left: 24px; }
@@ -44,17 +43,18 @@
 <body>
   <div class="container">
     <h1>Zeiterfassung</h1>
-    
+    <div class="top-bar">
+      <a href="bestellung.html" class="nav-btn">Bestellung</a>
+      <button id="exportBtn" class="nav-btn primary">Monatsauswertung</button>
+    </div>
     <div class="row">
       <label for="employee">Mitarbeiter:</label>
       <select id="employee"><option value="">-- Bitte wählen --</option></select>
       <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
     </div>
-    
     <div id="status">Bitte wählen</div>
     <div id="errorMsg"></div>
     <div id="warningMsg"></div>
-    
     <div class="row">
       <label for="rangeFilter">Zeitraum:</label>
       <select id="rangeFilter" style="flex:1">
@@ -63,7 +63,6 @@
         <option value="30">30 Tage</option>
       </select>
     </div>
-    
     <div class="entries">
       <h3>Einträge</h3>
       <div id="entryList"><div class="loading">Warte auf Auswahl...</div></div>
@@ -92,7 +91,7 @@
     const db = firebase.firestore();
     db.settings({ ignoreUndefinedProperties: true });
 
-    const employees = ["Andrea","Leonie", "Natalie", "Rebekka", "Stephan"];
+    const employees = ["Anna", "Ben", "Clara", "David"];
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
@@ -100,6 +99,7 @@
     const warningMsg = document.getElementById('warningMsg');
     const list = document.getElementById('entryList');
     const rangeFilter = document.getElementById('rangeFilter');
+    const exportBtn = document.getElementById('exportBtn');
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
     let dayBreakDeficits = {};
@@ -107,7 +107,6 @@
 
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.disabled = false;
-
     if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
 
     sel.addEventListener('change', () => {
@@ -117,13 +116,21 @@
     });
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
 
-    function isSameDay(d1, d2) { return d1.getFullYear()===d2.getFullYear() && d1.getMonth()===d2.getMonth() && d1.getDate()===d2.getDate(); }
-    function fmtTime(d) { return d ? d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
-    function fmtDate(d) { return d ? d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
-    function fmtKey(d) { return d ? d.toISOString().slice(0,10) : ''; }
+    function toDateSafe(val) {
+      if (!val) return null;
+      if (val.toDate) return val.toDate();
+      if (val instanceof Date) return val;
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function fmtTime(d) { const date = toDateSafe(d); return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
+    function fmtDate(d) { const date = toDateSafe(d); return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
+    function fmtKey(d) { const date = toDateSafe(d); return date ? date.toISOString().slice(0,10) : ''; }
     function msToMin(ms) { return Math.floor(ms/60000); }
     function fmtDur(mins) { const h=Math.floor(mins/60), m=mins%60; return h>0?`${h}h ${m}m`:`${m}min`; }
     function inRange(date, days) { if(!date)return false; const c=new Date(); c.setDate(c.getDate()-days); return date>=c; }
+    function isSameDay(d1, d2) { const a = toDateSafe(d1), b = toDateSafe(d2); return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
 
     function getRequiredBreak(workMinutes) {
       if (workMinutes >= 540) return 45;
@@ -136,17 +143,16 @@
       const pairs = [];
       for(let i=0; i<entries.length; i+=2) {
         if(!entries[i+1]) break;
-        const s = entries[i].startTime?.toDate?.() || new Date(entries[i].startTime);
-        const e = entries[i+1].endTime?.toDate?.() || new Date(entries[i+1].endTime);
+        const s = toDateSafe(entries[i].startTime);
+        const e = toDateSafe(entries[i+1].endTime);
+        if(!s || !e) continue;
         workMin += msToMin(e - s);
         pairs.push({s, e});
       }
       for(let i=0; i<pairs.length-1; i++) {
         breakMin += msToMin(pairs[i+1].s - pairs[i].e);
       }
-      const req = getRequiredBreak(workMin);
-      const deficit = Math.max(0, req - breakMin);
-      return { workMin, breakMin, req, deficit, hasBreak: breakMin > 0 };
+      return { workMin, breakMin, req: getRequiredBreak(workMin), deficit: Math.max(0, getRequiredBreak(workMin) - breakMin) };
     }
 
     async function loadUserState() {
@@ -156,25 +162,20 @@
         const snap = await db.collection('entries').where('employee','==',user).orderBy('startTime','desc').limit(100).get();
         allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
         const last = allEntries[0] || null;
-
         if (last && !last.endTime) {
-          const start = last.startTime?.toDate?.() || new Date(last.startTime);
-          if (!isSameDay(start, new Date())) {
+          const start = toDateSafe(last.startTime);
+          if (start && !isSameDay(start, new Date())) {
             const endTime = new Date(start.getTime() + 60000);
             await db.collection('entries').doc(last.id).update({ endTime });
             showWarning("⚠️ Offene Buchung vom Vortag wurde automatisch beendet (+1 Min).");
             await loadUserState(); return;
           }
         }
-
         updateUI(last);
         renderList(allEntries);
       } catch(e) {
-        if(e.message.includes('index')) {
-          showError("⚠️ Firestore-Index fehlt. Bitte den Link in der Browser-Console öffnen, um ihn anzulegen.");
-        } else {
-          showError("Fehler: "+e.message);
-        }
+        if(e.message.includes('index')) showError("⚠️ Firestore-Index fehlt.");
+        else showError("Fehler: "+e.message);
         updateUI(null); renderList([]);
       }
     }
@@ -182,9 +183,8 @@
     function updateUI(last) {
       if(last && !last.endTime) {
         btn.textContent = 'GEHEN'; btn.classList.add('check-out');
-        const start = last.startTime?.toDate?.() || new Date(last.startTime);
-        const diff = Date.now() - start.getTime();
-        status.textContent = `Aktiv seit ${fmtTime(start)} (${fmtDur(msToMin(diff))})`;
+        const start = toDateSafe(last.startTime);
+        status.textContent = start ? `Aktiv seit ${fmtTime(start)} (${fmtDur(msToMin(Date.now()-start))})` : 'Aktiv';
       } else { btn.textContent = 'KOMMEN'; btn.classList.remove('check-out'); status.textContent = 'Bereit'; }
       btn.disabled = false;
     }
@@ -194,34 +194,28 @@
       dayBreakDeficits = {};
       const days = parseInt(rangeFilter.value);
       const byDay = {};
-      
       entries.forEach(e => {
-        const s = e.startTime?.toDate?.() || (e.startTime ? new Date(e.startTime) : null);
+        const s = toDateSafe(e.startTime);
         if(!inRange(s, days)) return;
         const key = fmtKey(s);
         if(!byDay[key]) byDay[key] = { date: s, entries: [] };
         byDay[key].entries.push(e);
       });
-
       if(!Object.keys(byDay).length) { list.innerHTML = '<div class="loading">Keine Einträge im Zeitraum</div>'; return; }
 
       let html = '';
       Object.values(byDay).sort((a,b) => b.date - a.date).forEach(day => {
-        day.entries.sort((a,b) => (a.startTime?.toDate?.() || new Date(a.startTime)) - (b.startTime?.toDate?.() || new Date(b.startTime)));
+        day.entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
         const stats = analyzeDay(day.entries);
         dayBreakDeficits[fmtKey(day.date)] = stats.deficit;
-
-        let totalMin = stats.workMin;
-        let totalHtml = `<span class="day-total legal">Σ ${fmtDur(totalMin)}</span>`;
         let breakHtml = '';
         if(stats.req > 0) {
           breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (-'+stats.deficit+'min)' : ' (OK)'}</div>`;
         }
-
         const rows = day.entries.map(e => {
-          const s = e.startTime?.toDate?.() || new Date(e.startTime);
-          const en = e.endTime?.toDate?.() || (e.endTime ? new Date(e.endTime) : null);
-          const sIso = s.toISOString(), eIso = en ? en.toISOString() : '';
+          const s = toDateSafe(e.startTime);
+          const en = toDateSafe(e.endTime);
+          const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
           return `<div class="time-row">
             <span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>
             <button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>
@@ -231,13 +225,11 @@
             <button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>
           </div>`;
         }).join('');
-        
         const prevKey = Object.keys(byDay).find(k => k < fmtKey(day.date));
         const prevDeficit = prevKey ? dayBreakDeficits[prevKey] : 0;
         const legalNote = prevDeficit > 0 ? `<div class="break-warning">Hinweis: Vorheriger Tag: ${prevDeficit}min gesetzl. Pause abgezogen</div>` : '';
-
         html += `<div class="day-group">
-          <div class="day-header"><span>${fmtDate(day.date)}</span>${totalHtml}</div>
+          <div class="day-header"><span>${fmtDate(day.date)}</span><span class="day-total">Σ ${fmtDur(stats.workMin)}</span></div>
           ${legalNote}
           ${rows}
           ${breakHtml}
@@ -245,9 +237,8 @@
         </div>`;
       });
       list.innerHTML = html;
-      
       document.querySelectorAll('.corr-btn').forEach(b => {
-        b.onclick = (ev) => { const id=ev.target.dataset.id, f=ev.target.dataset.f, v=ev.target.dataset.v; correctTimestamp(id, f, v); };
+        b.onclick = (ev) => { correctTimestamp(ev.target.dataset.id, ev.target.dataset.f, ev.target.dataset.v); };
       });
     }
 
@@ -268,9 +259,8 @@
       btn.disabled = true; status.textContent = 'Speichere...'; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
       try {
         const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
-        
+        const todayKey = fmtKey(new Date());
         if(snap.empty) {
-          const todayKey = fmtKey(new Date());
           const todayEntries = allEntries.filter(e => fmtKey(e.startTime) === todayKey);
           if(todayEntries.length === 0) {
             const prevDayKey = Object.keys(dayBreakDeficits).sort().reverse().find(k => k !== todayKey);
@@ -278,29 +268,21 @@
               showWarning("Hinweis: Am " + prevDayKey.replace(/-/g,'.') + " fehlten " + dayBreakDeficits[prevDayKey] + "min Pause. Werden gesetzlich abgezogen.");
             }
           }
-          await db.collection('entries').add({ 
-            employee:user, 
-            startTime: serverTimestamp(), 
-            endTime:null, 
-            note:'', 
-            createdAt: serverTimestamp() 
-          });
+          await db.collection('entries').add({ employee:user, startTime: serverTimestamp(), endTime:null, note:'', createdAt: serverTimestamp() });
         } else {
           const doc = snap.docs[0];
-          const proposedEnd = new Date();
-          const todayEntries = allEntries.filter(e => isSameDay(e.startTime?.toDate?.()||new Date(e.startTime), new Date())).sort((a,b)=>(a.startTime||0)-(b.startTime||0));
-          
-          let finalEnd = proposedEnd;
+          const todayEntries = allEntries.filter(e => isSameDay(e.startTime, new Date())).sort((a,b)=>(toDateSafe(a.startTime)||0)-(toDateSafe(b.startTime)||0));
           const openInIdx = todayEntries.findIndex(e => e.id === doc.id);
+          let finalEnd = new Date();
           if(openInIdx >= 2) {
-            const prevOut = todayEntries[openInIdx-1].endTime?.toDate?.() || new Date(todayEntries[openInIdx-1].endTime);
-            const curIn = todayEntries[openInIdx].startTime?.toDate?.() || new Date(todayEntries[openInIdx].startTime);
+            const prevOut = toDateSafe(todayEntries[openInIdx-1].endTime);
+            const curIn = toDateSafe(todayEntries[openInIdx].startTime);
             if(curIn && prevOut) {
               const actualBreak = msToMin(curIn - prevOut);
               let simWorkMin = 0;
               for(let i=0; i<todayEntries.length; i+=2) {
-                if(i===openInIdx-1) { simWorkMin += msToMin(finalEnd - (todayEntries[i].startTime?.toDate?.()||new Date(todayEntries[i].startTime))); }
-                else if(todayEntries[i+1]) { simWorkMin += msToMin((todayEntries[i+1].endTime?.toDate?.()||new Date(todayEntries[i+1].endTime)) - (todayEntries[i].startTime?.toDate?.()||new Date(todayEntries[i].startTime))); }
+                if(i===openInIdx-1) simWorkMin += msToMin(finalEnd - toDateSafe(todayEntries[i].startTime));
+                else if(todayEntries[i+1]) simWorkMin += msToMin(toDateSafe(todayEntries[i+1].endTime) - toDateSafe(todayEntries[i].startTime));
               }
               const req = getRequiredBreak(simWorkMin);
               const deficit = Math.max(0, req - actualBreak);
@@ -314,6 +296,84 @@
         }
         await loadUserState();
       } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
+    });
+
+    exportBtn.addEventListener('click', async () => {
+      if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
+      exportBtn.disabled = true; exportBtn.textContent = "Erstelle PDF...";
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .get();
+        
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+        
+        const byDay = {};
+        entries.forEach(e => {
+          const s = toDateSafe(e.startTime);
+          if(!s) return;
+          const key = fmtKey(s);
+          if(!byDay[key]) byDay[key] = [];
+          byDay[key].push(e);
+        });
+
+        const tableData = [];
+        let totalMonth = 0;
+        Object.keys(byDay).sort().forEach(dayKey => {
+          const dayEntries = byDay[dayKey];
+          const stats = analyzeDay(dayEntries);
+          totalMonth += stats.workMin;
+          const hint = stats.deficit > 0 ? `⚠️ -${stats.deficit}min Pause` : stats.req > 0 ? 'Pause OK' : '';
+          const firstIn = fmtTime(toDateSafe(dayEntries[0].startTime));
+          const lastOut = dayEntries[dayEntries.length-1].endTime ? fmtTime(toDateSafe(dayEntries[dayEntries.length-1].endTime)) : 'Offen';
+          tableData.push([
+            fmtDate(toDateSafe(dayEntries[0].startTime)),
+            firstIn,
+            lastOut,
+            stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-',
+            fmtDur(stats.workMin),
+            hint
+          ]);
+        });
+
+        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(16);
+        doc.text(`Arbeitszeitnachweis: ${user}`, 14, 20);
+        doc.setFontSize(10);
+        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+        doc.autoTable({
+          startY: 35,
+          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [37, 99, 235] },
+          styles: { fontSize: 9, cellPadding: 3 },
+          columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }
+        });
+
+        const finalY = doc.lastAutoTable.finalY + 20;
+        doc.setLineWidth(0.5);
+        doc.line(14, finalY, 90, finalY);
+        doc.line(100, finalY, 180, finalY);
+        doc.setFontSize(9);
+        doc.text("Unterschrift Mitarbeiter", 14, finalY + 5);
+        doc.text("Unterschrift Vorgesetzter", 100, finalY + 5);
+        doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15);
+
+        doc.save(`Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`);
+      } catch(e) {
+        showError("PDF-Fehler: "+e.message);
+      }
+      exportBtn.disabled = false; exportBtn.textContent = "Monatsauswertung";
     });
   </script>
 </body>
