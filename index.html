@@ -6,6 +6,7 @@
   <title>Zeiterfassung</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 1rem; background: #f5f5f5; color: #222; }
     .container { max-width: 420px; margin: 0 auto; background: #fff; padding: 1rem; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
@@ -14,6 +15,17 @@
     .nav-btn { flex: 1; padding: 10px; border: 1px solid #ccc; background: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #333; font-size: 0.95rem; }
     .nav-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
     .nav-btn:hover { filter: brightness(0.95); }
+    .export-wrapper { position: relative; flex: 1; }
+    .export-btn { width: 100%; padding: 10px; border: none; background: #2563eb; color: #fff; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; }
+    .export-btn:hover { filter: brightness(0.95); }
+    .export-arrow { margin-left: 8px; font-size: 0.7rem; transition: transform 0.2s; }
+    .export-arrow.open { transform: rotate(180deg); }
+    .export-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; display: none; }
+    .export-dropdown.show { display: block; }
+    .export-option { padding: 10px 14px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #eee; }
+    .export-option:last-child { border-bottom: none; }
+    .export-option:hover { background: #f3f4f6; }
+    .export-option.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
     .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
     .row label { margin: 0; white-space: nowrap; font-weight: 500; font-size: 0.9rem; }
     .row select { flex: 1; padding: 8px; font-size: 0.95rem; border-radius: 8px; border: 1px solid #ccc; }
@@ -45,7 +57,16 @@
     <h1>Zeiterfassung</h1>
     <div class="top-bar">
       <a href="bestellung.html" class="nav-btn">Bestellung</a>
-      <button id="exportBtn" class="nav-btn primary">Monatsauswertung</button>
+      <div class="export-wrapper">
+        <button id="exportBtn" class="export-btn">
+          <span>Monatsauswertung</span>
+          <span class="export-arrow" id="exportArrow">▼</span>
+        </button>
+        <div class="export-dropdown" id="exportDropdown">
+          <div class="export-option active" data-format="pdf">PDF (Standard)</div>
+          <div class="export-option" data-format="excel">Excel (.xlsx)</div>
+        </div>
+      </div>
     </div>
     <div class="row">
       <label for="employee">Mitarbeiter:</label>
@@ -91,7 +112,7 @@
     const db = firebase.firestore();
     db.settings({ ignoreUndefinedProperties: true });
 
-    const employees = ["Andrea", "Leonie", "Natalie", "Rebekka", "Stephan"];
+    const employees = ["Anna", "Ben", "Clara", "David"];
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
@@ -100,9 +121,13 @@
     const list = document.getElementById('entryList');
     const rangeFilter = document.getElementById('rangeFilter');
     const exportBtn = document.getElementById('exportBtn');
+    const exportArrow = document.getElementById('exportArrow');
+    const exportDropdown = document.getElementById('exportDropdown');
+    const exportOptions = document.querySelectorAll('.export-option');
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
     let dayBreakDeficits = {};
+    let selectedFormat = 'pdf';
     const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
 
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join('');
@@ -115,6 +140,30 @@
       else { btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; }
     });
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
+
+    exportBtn.addEventListener('click', (e) => {
+      if(e.target === exportBtn || e.target === exportArrow) {
+        exportDropdown.classList.toggle('show');
+        exportArrow.classList.toggle('open');
+      }
+    });
+
+    exportOptions.forEach(opt => {
+      opt.addEventListener('click', () => {
+        exportOptions.forEach(o => o.classList.remove('active'));
+        opt.classList.add('active');
+        selectedFormat = opt.dataset.format;
+        exportDropdown.classList.remove('show');
+        exportArrow.classList.remove('open');
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if(!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) {
+        exportDropdown.classList.remove('show');
+        exportArrow.classList.remove('open');
+      }
+    });
 
     function toDateSafe(val) {
       if (!val) return null;
@@ -298,9 +347,10 @@
       } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
     });
 
-    exportBtn.addEventListener('click', async () => {
+    async function exportData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      exportBtn.disabled = true; exportBtn.textContent = "Erstelle PDF...";
+      exportBtn.disabled = true; 
+      
       try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -323,57 +373,91 @@
           byDay[key].push(e);
         });
 
-        const tableData = [];
-        let totalMonth = 0;
-        Object.keys(byDay).sort().forEach(dayKey => {
-          const dayEntries = byDay[dayKey];
-          const stats = analyzeDay(dayEntries);
-          totalMonth += stats.workMin;
-          const hint = stats.deficit > 0 ? `⚠️ -${stats.deficit}min Pause` : stats.req > 0 ? 'Pause OK' : '';
-          const firstIn = fmtTime(toDateSafe(dayEntries[0].startTime));
-          const lastOut = dayEntries[dayEntries.length-1].endTime ? fmtTime(toDateSafe(dayEntries[dayEntries.length-1].endTime)) : 'Offen';
-          tableData.push([
-            fmtDate(toDateSafe(dayEntries[0].startTime)),
-            firstIn,
-            lastOut,
-            stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-',
-            fmtDur(stats.workMin),
-            hint
-          ]);
-        });
+        if(format === 'pdf') {
+          const tableData = [];
+          let totalMonth = 0;
+          Object.keys(byDay).sort().forEach(dayKey => {
+            const dayEntries = byDay[dayKey];
+            const stats = analyzeDay(dayEntries);
+            totalMonth += stats.workMin;
+            const hint = stats.deficit > 0 ? `⚠️ -${stats.deficit}min Pause` : stats.req > 0 ? 'Pause OK' : '';
+            const firstIn = fmtTime(toDateSafe(dayEntries[0].startTime));
+            const lastOut = dayEntries[dayEntries.length-1].endTime ? fmtTime(toDateSafe(dayEntries[dayEntries.length-1].endTime)) : 'Offen';
+            tableData.push([
+              fmtDate(toDateSafe(dayEntries[0].startTime)),
+              firstIn,
+              lastOut,
+              stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-',
+              fmtDur(stats.workMin),
+              hint
+            ]);
+          });
+          tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
 
-        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF();
+          doc.setFontSize(16);
+          doc.text(`Arbeitszeitnachweis: ${user}`, 14, 20);
+          doc.setFontSize(10);
+          doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+          doc.autoTable({
+            startY: 35,
+            head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [37, 99, 235] },
+            styles: { fontSize: 9, cellPadding: 3 },
+            columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }
+          });
 
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        doc.setFontSize(16);
-        doc.text(`Arbeitszeitnachweis: ${user}`, 14, 20);
-        doc.setFontSize(10);
-        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
-        doc.autoTable({
-          startY: 35,
-          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']],
-          body: tableData,
-          theme: 'grid',
-          headStyles: { fillColor: [37, 99, 235] },
-          styles: { fontSize: 9, cellPadding: 3 },
-          columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }
-        });
+          const finalY = doc.lastAutoTable.finalY + 20;
+          doc.setLineWidth(0.5);
+          doc.line(14, finalY, 90, finalY);
+          doc.line(100, finalY, 180, finalY);
+          doc.setFontSize(9);
+          doc.text("Unterschrift Mitarbeiter", 14, finalY + 5);
+          doc.text("Unterschrift Vorgesetzter", 100, finalY + 5);
+          doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15);
 
-        const finalY = doc.lastAutoTable.finalY + 20;
-        doc.setLineWidth(0.5);
-        doc.line(14, finalY, 90, finalY);
-        doc.line(100, finalY, 180, finalY);
-        doc.setFontSize(9);
-        doc.text("Unterschrift Mitarbeiter", 14, finalY + 5);
-        doc.text("Unterschrift Vorgesetzter", 100, finalY + 5);
-        doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15);
-
-        doc.save(`Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`);
+          doc.save(`Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`);
+        } else if(format === 'excel') {
+          const wb = XLSX.utils.book_new();
+          const wsData = [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']];
+          let totalMonth = 0;
+          
+          Object.keys(byDay).sort().forEach(dayKey => {
+            const dayEntries = byDay[dayKey];
+            const stats = analyzeDay(dayEntries);
+            totalMonth += stats.workMin;
+            const hint = stats.deficit > 0 ? `-${stats.deficit}min Pause` : stats.req > 0 ? 'OK' : '';
+            const firstIn = fmtTime(toDateSafe(dayEntries[0].startTime));
+            const lastOut = dayEntries[dayEntries.length-1].endTime ? fmtTime(toDateSafe(dayEntries[dayEntries.length-1].endTime)) : 'Offen';
+            wsData.push([
+              fmtDate(toDateSafe(dayEntries[0].startTime)),
+              firstIn,
+              lastOut,
+              stats.breakMin > 0 ? fmtDur(stats.breakMin) : '',
+              fmtDur(stats.workMin),
+              hint
+            ]);
+          });
+          
+          wsData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+          
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+          ws['!cols'] = [{wch:12}, {wch:10}, {wch:10}, {wch:10}, {wch:12}, {wch:20}];
+          
+          XLSX.utils.book_append_sheet(wb, ws, "Zeiten");
+          XLSX.writeFile(wb, `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.xlsx`);
+        }
       } catch(e) {
-        showError("PDF-Fehler: "+e.message);
+        showError("Export-Fehler: "+e.message);
       }
-      exportBtn.disabled = false; exportBtn.textContent = "Monatsauswertung";
+      exportBtn.disabled = false;
+    }
+
+    exportBtn.querySelector('.export-btn').addEventListener('click', () => {
+      exportData(selectedFormat);
     });
   </script>
 </body>
