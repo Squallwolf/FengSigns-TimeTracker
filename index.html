@@ -305,7 +305,8 @@
       const [h,m] = input.split(':').map(Number);
       if(isNaN(h)||isNaN(m)||h<0||h>23||m<0||m>59) { alert('Ungültig'); return; }
       const newDate = new Date(base); newDate.setHours(h,m,0,0);
-      try { await db.collection('entries').doc(id).update({[field]:newDate}); await loadUserState(); }
+      const ts = firebase.firestore.Timestamp.fromDate(newDate);
+      try { await db.collection('entries').doc(id).update({[field]:ts}); await loadUserState(); }
       catch(e) { showError('Fehler: '+e.message); }
     }
 
