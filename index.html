@@ -192,23 +192,33 @@
       if (workMinutes >= 360) return 30;
       return 0;
     }
-
+    
     function analyzeDay(entries) {
-      let workMin = 0, breakMin = 0;
-      const pairs = [];
-      for(let i=0; i<entries.length; i+=2) {
-        if(!entries[i+1]) break;
-        const s = toDateSafe(entries[i].startTime);
-        const e = toDateSafe(entries[i+1].endTime);
-        if(!s || !e) continue;
-        workMin += msToMin(e - s);
-        pairs.push({s, e});
-      }
-      for(let i=0; i<pairs.length-1; i++) {
-        breakMin += msToMin(pairs[i+1].s - pairs[i].e);
-      }
-      return { workMin, breakMin, req: getRequiredBreak(workMin), deficit: Math.max(0, getRequiredBreak(workMin) - breakMin) };
+  let workMin = 0, breakMin = 0;
+  for(let i = 0; i < entries.length; i++) {
+    const s = toDateSafe(entries[i].startTime);
+    const e = toDateSafe(entries[i].endTime);
+    if(!s || !e) continue; // Überspringe offene Einträge
+    workMin += msToMin(e - s);
+  }
+  const sorted = [...entries].sort((a, b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+
+  for(let i = 0; i < sorted.length - 1; i++) {
+    const endOfThis = toDateSafe(sorted[i].endTime);
+    const startOfNext = toDateSafe(sorted[i+1].startTime);
+    if(endOfThis && startOfNext) {
+      breakMin += msToMin(startOfNext - endOfThis);
     }
+  }
+  
+  const req = getRequiredBreak(workMin);
+  return { 
+    workMin, 
+    breakMin, 
+    req, 
+    deficit: Math.max(0, req - breakMin) 
+  };
+}
 
     async function loadUserState() {
       if(!user) return;
