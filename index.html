@@ -394,15 +394,19 @@
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
 
-          const actualWorkMin = stats.deficit > 0 ? stats.workMin - stats.deficit : stats.workMin;
-          totalMonth += actualWorkMin;
+          // Arbeitszeit: Zeige die tatsächlich gearbeitete Zeit (volle Bezahlung)
+          const displayedWorkMin = stats.workMin;
+          totalMonth += displayedWorkMin;
 
+          // Pause: Zeige immer die gesetzlich geforderte Dauer
           const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
 
+          // OUT: Bei Pausen-Defizit wird die OUT-Zeit auf IN+Arbeit+Pause gesetzt
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
-            const adjustedOut = new Date(firstIn.getTime() + (actualWorkMin + stats.req) * 60000);
+            // OUT = erstes IN + gearbeitete Zeit + geforderte Pause
+            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
             outDisplay = fmtTime(adjustedOut);
           } else {
             outDisplay = dayEntries[dayEntries.length-1].endTime 
@@ -415,7 +419,7 @@
             fmtTime(toDateSafe(dayEntries[0].startTime)),
             outDisplay,
             pauseDisplay,
-            fmtDur(actualWorkMin),
+            fmtDur(displayedWorkMin),
             ''
           ]);
         });
@@ -425,10 +429,12 @@
         if(format === 'pdf') {
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF();
+          
           doc.setFontSize(16);
           doc.text(`Arbeitszeitnachweis: ${user}`, 14, 20);
           doc.setFontSize(10);
           doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+          
           doc.autoTable({
             startY: 35,
             head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']],
@@ -436,19 +442,25 @@
             theme: 'grid',
             headStyles: { fillColor: [37, 99, 235] },
             styles: { fontSize: 9, cellPadding: 3 },
-            columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }
+            columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} },
+            didDrawPage: function(data) {
+              if (data.pageNumber === doc.internal.getNumberOfPages()) {
+                const finalY = data.cursor.y + 10;
+                doc.setLineWidth(0.5);
+                doc.line(14, finalY, 90, finalY);
+                doc.line(100, finalY, 180, finalY);
+                doc.setFontSize(9);
+                doc.text("Unterschrift Mitarbeiter", 14, finalY + 5);
+                doc.text("Unterschrift Vorgesetzter", 100, finalY + 5);
+                doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15);
+              }
+            }
           });
 
-          const finalY = doc.lastAutoTable.finalY + 20;
-          doc.setLineWidth(0.5);
-          doc.line(14, finalY, 90, finalY);
-          doc.line(100, finalY, 180, finalY);
-          doc.setFontSize(9);
-          doc.text("Unterschrift Mitarbeiter", 14, finalY + 5);
-          doc.text("Unterschrift Vorgesetzter", 100, finalY + 5);
-          doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15);
-
-          doc.save(`Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          const filename = `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`;
+          doc.save(filename);
 
         } else if(format === 'excel') {
           const wb = XLSX.utils.book_new();
@@ -459,6 +471,7 @@
           XLSX.writeFile(wb, `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.xlsx`);
         }
       } catch(e) {
+        console.error("Export error:", e);
         showError("Export-Fehler: "+e.message);
       }
       exportBtn.disabled = false;
