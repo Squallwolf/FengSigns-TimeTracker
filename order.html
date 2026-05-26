@@ -663,7 +663,7 @@ let productsDB = [];
 
 async function loadProducts() {
   try {
-    const response = await fetch('products.json');
+    const response = await fetch('squallwolf.github.io/FengSigns-TimeTracker/products.json');
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     productsDB = await response.json();
     console.log('✅ Produkte geladen:', productsDB.length);
