@@ -84,7 +84,48 @@
     function setupAutocomplete(inputElement, autocompleteElement, searchBy) { inputElement.addEventListener('input', function() { const value = this.value.toLowerCase().trim(); autocompleteElement.innerHTML = ''; if (value.length === 0) { autocompleteElement.classList.remove('active'); return; } const filtered = productsDB.filter(product => { if (searchBy === 'article') { return product.articleNumber.toLowerCase().includes(value); } else { return product.productName.toLowerCase().includes(value); } }); if (filtered.length > 0) { filtered.forEach(product => { const div = document.createElement('div'); div.className = 'autocomplete-item'; div.innerHTML = `<div class="article-number">${product.articleNumber}</div><div class="product-name">${product.productName}</div>`; div.addEventListener('click', function() { articleInput.value = product.articleNumber; productInput.value = product.productName; articleAutocomplete.classList.remove('active'); productAutocomplete.classList.remove('active'); }); autocompleteElement.appendChild(div); }); autocompleteElement.classList.add('active'); } else { autocompleteElement.classList.remove('active'); } }); }
     setupAutocomplete(articleInput, articleAutocomplete, 'article'); setupAutocomplete(productInput, productAutocomplete, 'product');
     const form = document.getElementById('orderForm'), successMessage = document.getElementById('successMessage');
-    form.addEventListener('submit', async function(e) { e.preventDefault(); let deliveryDateTime = new Date(); const deliveryDateValue = document.getElementById('deliveryDate').value, deliveryTimeValue = document.getElementById('deliveryTime').value; if (deliveryDateValue === 'tomorrow') deliveryDateTime.setDate(deliveryDateTime.getDate() + 1); else if (deliveryDateValue === 'dayAfterTomorrow') deliveryDateTime.setDate(deliveryDateTime.getDate() + 2); else if (deliveryDateValue === 'monday') { const today = deliveryDateTime.getDay(); let daysToAdd = (today === 1) ? 7 : (8 - today) % 7; deliveryDateTime.setDate(deliveryDateTime.getDate() + daysToAdd); const startTime = deliveryTimeValue.split('-')[0]; const [hours, minutes] = startTime.split(':'); deliveryDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0); } const formData = { articleNumber: document.getElementById('articleNumber').value, productName: document.getElementById('productName').value, quantity: parseFloat(document.getElementById('quantity').value), unit: document.getElementById('unit').value, department: document.getElementById('department').value, deliveryDate: deliveryDateValue, deliveryTime: deliveryTimeValue, deliveryDateTime: firebase.firestore.Timestamp.fromDate(deliveryDateTime), timestamp: firebase.firestore.FieldValue.serverTimestamp(), status: 'offen' }; try { const docRef = await db.collection('orders').add(formData); successMessage.textContent = '✓ Bestellung erfolgreich übermittelt! (ID: ' + docRef.id + ')'; successMessage.style.display = 'block'; document.getElementById('articleNumber').value = ''; document.getElementById('productName').value = ''; document.getElementById('quantity').value = ''; document.getElementById('unit').value = ''; document.getElementById('articleNumber').focus(); setTimeout(() => { successMessage.style.display = 'none'; successMessage.textContent = '✓ Bestellung erfolgreich übermittelt!'; }, 5000); } catch (error) { alert('Fehler beim Übermitteln der Bestellung:\n' + error.message); } });
+  form.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  let deliveryDateTime = new Date();
+  if (deliveryDateValue === 'tomorrow') deliveryDateTime.setDate(deliveryDateTime.getDate() + 1);
+  else if (deliveryDateValue === 'dayAfterTomorrow') deliveryDateTime.setDate(deliveryDateTime.getDate() + 2);
+  else if (deliveryDateValue === 'monday') {
+    const today = deliveryDateTime.getDay();
+    let daysToAdd = (today === 1) ? 7 : (8 - today) % 7;
+    deliveryDateTime.setDate(deliveryDateTime.getDate() + daysToAdd);
+    const startTime = deliveryTimeValue.split('-')[0];
+    const [hours, minutes] = startTime.split(':');
+    deliveryDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+  }
+  
+  const formData = {
+    articleNumber: document.getElementById('articleNumber').value,
+    productName: document.getElementById('productName').value,
+    quantity: parseFloat(document.getElementById('quantity').value),
+    unit: document.getElementById('unit').value,
+    department: department,
+    deliveryDate: deliveryDateValue,
+    deliveryTime: deliveryTimeValue,
+    deliveryDateTime: firebase.firestore.Timestamp.fromDate(deliveryDateTime),
+    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+    status: 'offen'
+  };
+  
+  try {
+    const docRef = await db.collection('orders').add(formData);
+    successMessage.textContent = '✓ Bestellung erfolgreich übermittelt! (ID: ' + docRef.id + ')';
+    successMessage.style.display = 'block';
+    document.getElementById('articleNumber').value = '';
+    document.getElementById('productName').value = '';
+    document.getElementById('quantity').value = '';
+    document.getElementById('unit').value = '';
+    document.getElementById('articleNumber').focus();
+    setTimeout(() => { successMessage.style.display = 'none'; successMessage.textContent = '✓ Bestellung erfolgreich übermittelt!'; }, 5000);
+  } catch (error) {
+    console.error('Firestore-Fehler:', error);
+    alert('Fehler beim Übermitteln: ' + error.message);
+  }
+});
     let currentFilter = 'all';
     function getRelativeDeliveryLabel(deliveryDate) { if (!deliveryDate) return 'Unbekannt'; const now = new Date(); const delivery = deliveryDate.toDate ? deliveryDate.toDate() : deliveryDate; const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); const deliveryDay = new Date(delivery.getFullYear(), delivery.getMonth(), delivery.getDate()); const diffTime = deliveryDay.getTime() - today.getTime(); const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24)); if (diffDays === 0) return 'Heute'; else if (diffDays === 1) return 'Morgen'; else if (diffDays === 2) return 'Übermorgen'; else if (diffDays < 0) return `! ${delivery.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}`; else return delivery.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
     function loadOrders() { db.collection('orders').onSnapshot((snapshot) => { const ordersList = document.getElementById('ordersList'); if (snapshot.empty) { ordersList.innerHTML = '<div class="no-orders">Keine Bestellungen vorhanden</div>'; return; } let orders = []; snapshot.forEach((doc) => { const order = { id: doc.id, ...doc.data() }; if (order.status === 'aufgebraucht') return; if (currentFilter === 'offen' && order.status !== 'offen') return; if (currentFilter === 'vorbereitet' && order.status !== 'vorbereitet') return; if (currentFilter === 'all' && order.status === 'erledigt') return;
