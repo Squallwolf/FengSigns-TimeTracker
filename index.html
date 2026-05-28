@@ -107,7 +107,7 @@
       <select id="employee"><option value="">-- Bitte wählen --</option></select>
       <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
     </div>
-    <div class="row" id="passwordRow" style="display:none;">
+    <div class="row" id="passwordRow">
       <label for="password">Passwort:</label>
       <input type="password" id="password" placeholder="••••••" style="flex:1;padding:10px 12px;font-size:0.95rem;border-radius:8px;border:2px solid #e0e0e0;background:#f9f9f9;">
     </div>
@@ -149,13 +149,11 @@
     if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
     sel.addEventListener('change', () => {
       user = sel.value; localStorage.setItem('tz_user', user);
-      const pwRow = document.getElementById('passwordRow');
-      if(user) { 
-        pwRow.style.display = 'flex'; 
-        loadUserState(); 
-      }
-      else { 
-        pwRow.style.display = 'none';
+        const pwInput = document.getElementById('password');
+        if(pwInput) pwInput.value = '';
+        if(user) loadUserState(); 
+        else { btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; }
+    });
         btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; 
       }
     });
