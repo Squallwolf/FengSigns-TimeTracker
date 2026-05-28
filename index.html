@@ -148,15 +148,18 @@
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join(''); sel.disabled = false;
     if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
     sel.addEventListener('change', () => {
-      user = sel.value; localStorage.setItem('tz_user', user);
-        const pwInput = document.getElementById('password');
-        if(pwInput) pwInput.value = '';
-        if(user) loadUserState(); 
-        else { btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>';
-    });
-        btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; 
-      }
-    });
+    user = sel.value; 
+    localStorage.setItem('tz_user', user);
+    const pwInput = document.getElementById('password');
+    if(pwInput) pwInput.value = '';
+    if(user) {
+      loadUserState(); 
+    } else { 
+      btn.disabled = true; 
+      status.textContent = "Bitte wählen"; 
+      list.innerHTML = '<div class="loading">Warte...</div>'; 
+    }
+  });
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
     exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); });
     exportBtn.addEventListener('click', (e) => { if (e.target !== exportArrow) { exportData(selectedFormat); } });
