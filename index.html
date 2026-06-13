@@ -129,14 +129,31 @@
     document.addEventListener('click', (e) => { if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); } });
     
     // === HELPERS ===
-    function toDateSafe(val) { if (!val) return null; if (val.toDate) return val.toDate(); if (val instanceof Date) return val; const d = new Date(val); return isNaN(d.getTime()) ? null : d; }
-    function fmtTime(d) { const date = toDateSafe(d); return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
-    function fmtDate(d) { const date = toDateSafe(d); return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
-    function fmtKey(d) { const date = toDateSafe(d); return date ? date.toISOString().slice(0,10) : ''; }
-    function msToMin(ms) { return Math.floor(ms/60000); }
-    function fmtDur(mins) { const h=Math.floor(mins/60), m=mins%60; return h>0?`${h}h ${m}m`:`${m}min`; }
-    function inRange(date, days) { if(!date)return false; const c=new Date(); c.setDate(c.getDate()-days); return date>=c; }
-    function isSameDay(d1, d2) { const a = toDateSafe(d1), b = toDateSafe(d2); return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+    function toDateSafe(val) {
+      if (!val) return null; if (val.toDate) return val.toDate();
+      if (val instanceof Date) return val; const d = new Date(val); return isNaN(d.getTime()) ? null : d; }
+    function fmtTime(d) { 
+      const date = toDateSafe(d); return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
+    function fmtDate(d) { 
+      const date = toDateSafe(d); return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
+    function fmtKey(d) {
+      const date = toDateSafe(d); return date ? date.toISOString().slice(0,10) : ''; }
+    function msToMin(ms) {
+      return Math.floor(ms/60000); }
+    function fmtDur(mins) {
+      const h=Math.floor(mins/60), m=mins%60; return h>0?`${h}h ${m}m`:`${m}min`; }
+    function inRange(date, days) { 
+      if(!date) return false; 
+      const d = toDateSafe(date);
+      const today = new Date().setHours(0,0,0,0);
+      const cutoff = new Date(today);
+      cutoff.setDate(cutoff.getDate() - days);
+      const dayOfDate = new Date(d).setHours(0,0,0,0);
+      return dayOfDate >= cutoff;
+    }
+    function isSameDay(d1, d2) {
+      const a = toDateSafe(d1), b = toDateSafe(d2);
+      return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
     
     // === PAUSEN-BERECHNUNG (EXPORT) ===
     function getRequiredBreak(workMinutes) { if (workMinutes >= 540) return 45; if (workMinutes >= 360) return 30; return 0; }
@@ -203,11 +220,22 @@
         if(stats.req > 0) {
           breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (-'+stats.deficit+'min)' : ' (OK)'}</div>`;
         }
+        const today = new Date(); today.setHours(0,0,0,0);
+        const yesterday = new Date(); yesterday.setDate(today.getDate()-1); yesterday.setHours(0,0,0,0);
+
         const rows = day.entries.map(e => {
-          const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime);
-          const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
-          return `<div class="time-row"><span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span><button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button></div><div class="time-row"><span class="time-label">OUT</span><span class="time-val">${en ? fmtTime(en) : 'Offen'}</span><button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button></div>`;
-        }).join('');
+        const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime);
+        const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
+  
+      // Nur für heute oder gestern den ✏️-Button anzeigen
+        const dayDate = new Date(s); dayDate.setHours(0,0,0,0);
+        const canEdit = (dayDate.getTime() === today.getTime() || dayDate.getTime() === yesterday.getTime());
+  
+        const editBtnIn = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>` : '';
+        const editBtnOut = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>` : '';
+  
+        return `<div class="time-row"><span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>${editBtnIn}</div><div class="time-row"><span class="time-label">OUT</span><span class="time-val">${en ? fmtTime(en) : 'Offen'}</span>${editBtnOut}</div>`;
+          }).join('');
         const totalWork = day.entries.reduce((sum, e) => { const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime); return sum + (s && en ? msToMin(en-s) : 0); }, 0);
         html += `<div class="day-group"><div class="day-header"><span>${fmtDate(day.date)}</span><span class="day-total">Σ ${fmtDur(totalWork)}</span></div>${rows}${breakHtml}${day.entries[0]?.note ? `<div class="note">Notiz: ${day.entries[0].note}</div>` : ''}</div>`;
       });
