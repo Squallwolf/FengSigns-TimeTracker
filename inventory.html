@@ -20,11 +20,9 @@
     .form-group input, .form-group select { width: 100%; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
     .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
 
-    /* Menge und Einheit auf einer Zeile */
     .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; margin-bottom: 0.75rem; }
     .row .form-group { margin-bottom: 0; }
 
-    /* Autocomplete Styles (aus order.html übernommen) */
     .autocomplete-container { position: relative; }
     .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #667eea; border-top: none; border-radius: 0 0 10px 10px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); display: none; }
     .autocomplete-list.active { display: block; }
@@ -62,7 +60,7 @@
     @media (max-width: 500px) { 
       .container { padding: 15px; } 
       .top-bar { grid-template-columns: 1fr; } 
-      .row { grid-template-columns: 1fr; } /* Untereinander auf sehr kleinen Bildschirmen */
+      .row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -94,11 +92,11 @@
         <label for="itemName">Artikel:</label>
         <div class="autocomplete-container">
           <input type="text" id="itemName" placeholder="z.B. Schrauben M6" autocomplete="off">
+          <input type="hidden" id="articleNumber">
           <div id="itemAutocomplete" class="autocomplete-list"></div>
         </div>
       </div>
       
-      <!-- Menge und Einheit auf einer Zeile -->
       <div class="row">
         <div class="form-group">
           <label for="quantity">Menge:</label>
@@ -135,13 +133,14 @@
           <thead>
             <tr>
               <th>Zeit</th>
+              <th>Art-Nr</th>
               <th>Artikel</th>
               <th>Menge</th>
               <th>Ort</th>
             </tr>
           </thead>
           <tbody id="tableBody">
-            <tr><td colspan="4" class="loading">Lade Daten...</td></tr>
+            <tr><td colspan="5" class="loading">Lade Daten...</td></tr>
           </tbody>
         </table>
       </div>
@@ -225,7 +224,6 @@
 
     function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
     
-    // Initialisierung
     loadStaff();
     loadProducts();
 
@@ -276,6 +274,7 @@
 
     // === AUTOCOMPLETE LOGIK ===
     const itemNameInput = document.getElementById('itemName');
+    const articleNumberInput = document.getElementById('articleNumber');
     const itemAutocomplete = document.getElementById('itemAutocomplete');
 
     itemNameInput.addEventListener('input', function() {
@@ -301,6 +300,7 @@
           `;
           div.addEventListener('click', function() {
             itemNameInput.value = product.productName;
+            articleNumberInput.value = product.articleNumber || '';
             itemAutocomplete.classList.remove('active');
           });
           itemAutocomplete.appendChild(div);
@@ -311,7 +311,6 @@
       }
     });
 
-    // Schließt Autocomplete bei Klick außerhalb
     document.addEventListener('click', function(e) {
       if (!itemNameInput.contains(e.target) && !itemAutocomplete.contains(e.target)) {
         itemAutocomplete.classList.remove('active');
@@ -321,7 +320,7 @@
     // === FIRESTORE & EXPORT LOGIK ===
     async function loadTodayEntries() {
       if (!currentUser) return;
-      tableBody.innerHTML = '<tr><td colspan="4" class="loading">Lade Daten...</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="5" class="loading">Lade Daten...</td></tr>';
       try {
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -338,13 +337,13 @@
         renderTable();
       } catch(e) {
         console.error(e);
-        tableBody.innerHTML = '<tr><td colspan="4" class="loading">Fehler beim Laden. Index fehlt ggf.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="5" class="loading">Fehler beim Laden. Index fehlt ggf.</td></tr>';
       }
     }
 
     function renderTable() {
       if (todayEntries.length === 0) {
-        tableBody.innerHTML = '<tr><td colspan="4" class="loading">Keine Einträge heute.</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="5" class="loading">Keine Einträge heute.</td></tr>';
         return;
       }
       
@@ -354,6 +353,7 @@
         return `
           <tr>
             <td>${timeStr}</td>
+            <td>${e.articleNumber || '-'}</td>
             <td>${e.itemName || '-'}</td>
             <td>${e.quantity} ${e.unit}</td>
             <td>${e.location || '-'}</td>
@@ -370,6 +370,7 @@
       }
 
       const itemName = document.getElementById('itemName').value.trim();
+      const articleNumber = document.getElementById('articleNumber').value.trim();
       const quantity = parseFloat(document.getElementById('quantity').value);
       const unit = document.getElementById('unit').value;
       const location = document.getElementById('location').value.trim();
@@ -387,6 +388,7 @@
       try {
         await db.collection('inventory').add({
           employee: currentUser,
+          articleNumber,
           itemName,
           quantity,
           unit,
@@ -397,6 +399,7 @@
         
         showSuccess('✅ Eintrag erfolgreich gespeichert.');
         document.getElementById('itemName').value = '';
+        document.getElementById('articleNumber').value = '';
         document.getElementById('quantity').value = '';
         document.getElementById('location').value = '';
         document.getElementById('note').value = '';
@@ -422,7 +425,7 @@
 
       try {
         const wsData = [
-          ['Datum', 'Uhrzeit', 'Mitarbeiter', 'Artikel', 'Menge', 'Einheit', 'Ort', 'Notiz']
+          ['Datum', 'Uhrzeit', 'Mitarbeiter', 'Art-Nr', 'Artikel', 'Menge', 'Einheit', 'Ort', 'Notiz']
         ];
 
         const sorted = [...todayEntries].sort((a, b) => {
@@ -440,6 +443,7 @@
             dateStr,
             timeStr,
             e.employee,
+            e.articleNumber || '-',
             e.itemName,
             e.quantity,
             e.unit,
@@ -452,7 +456,7 @@
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         
         ws['!cols'] = [
-          { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 25 }, 
+          { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 25 }, 
           { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 }
         ];
 
