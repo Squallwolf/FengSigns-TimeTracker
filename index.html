@@ -15,6 +15,8 @@
     .top-bar { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
     .nav-btn { flex: 1; padding: 10px; border: 2px solid #667eea; background: white; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #667eea; font-size: 0.95rem; transition: all 0.3s ease; }
     .nav-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+    .nav-btn.current-month { border-color: #059669; color: #059669; }
+    .nav-btn.current-month:hover { background: #059669; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
     .export-wrapper { position: relative; flex: 1; }
     .export-btn { width: 100%; padding: 10px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s ease; }
     .export-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
@@ -59,6 +61,7 @@
     <h1>⏱️ Zeiterfassung</h1>
     <div class="top-bar">
       <a href="https://squallwolf.github.io/FengSigns-TimeTracker/order.html" class="nav-btn">📦 Bestellung</a>
+      <a href="https://squallwolf.github.io/FengSigns-TimeTracker/inventory.html" class="nav-btn">📋 Inventur</a>
       <div class="export-wrapper">
         <button id="exportBtn" class="export-btn"><span>Monatsauswertung</span><span class="export-arrow" id="exportArrow">▼</span></button>
         <div class="export-dropdown" id="exportDropdown">
@@ -66,6 +69,7 @@
           <div class="export-option" data-format="excel">Excel (.xlsx)</div>
         </div>
       </div>
+      <button id="currentMonthBtn" class="nav-btn current-month">📊 Laufender Monat</button>
     </div>
     <div class="row">
       <label for="employee">Mitarbeiter:</label>
@@ -127,6 +131,9 @@
     exportBtn.addEventListener('click', (e) => { if (e.target !== exportArrow) exportData(selectedFormat); });
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
     document.addEventListener('click', (e) => { if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); } });
+
+    // === LAUFENDER MONAT BUTTON ===
+    document.getElementById('currentMonthBtn').addEventListener('click', () => exportCurrentMonthData('pdf'));
     
     // === HELPERS ===
     function toDateSafe(val) {
@@ -180,7 +187,6 @@
         const snap = await db.collection('entries').where('employee','==',user).orderBy('startTime','desc').limit(100).get();
         allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
         const last = allEntries[0] || null;
-        // Offene Buchung vom Vortag automatisch schließen (+1 Min)
         if (last && !last.endTime) {
           const start = toDateSafe(last.startTime);
           if (start && !isSameDay(start, new Date())) {
@@ -215,7 +221,7 @@
       let html = '';
       Object.values(byDay).sort((a,b) => b.date - a.date).forEach(day => {
         day.entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
-        const stats = analyzeDay(day.entries); // Nur für Anzeige der Pause-Info, keine DB-Änderung
+        const stats = analyzeDay(day.entries);
         let breakHtml = '';
         if(stats.req > 0) {
           breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (-'+stats.deficit+'min)' : ' (OK)'}</div>`;
@@ -226,14 +232,10 @@
         const rows = day.entries.map(e => {
         const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime);
         const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
-  
-      // Nur für heute oder gestern den ✏️-Button anzeigen
         const dayDate = new Date(s); dayDate.setHours(0,0,0,0);
         const canEdit = (dayDate.getTime() === today.getTime() || dayDate.getTime() === yesterday.getTime());
-  
         const editBtnIn = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>` : '';
         const editBtnOut = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>` : '';
-  
         return `<div class="time-row"><span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>${editBtnIn}</div><div class="time-row"><span class="time-label">OUT</span><span class="time-val">${en ? fmtTime(en) : 'Offen'}</span>${editBtnOut}</div>`;
           }).join('');
         const totalWork = day.entries.reduce((sum, e) => { const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime); return sum + (s && en ? msToMin(en-s) : 0); }, 0);
@@ -267,10 +269,8 @@
       try {
         const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
         if(snap.empty) {
-          // KOMMEN: Neuer Eintrag mit Rohzeit
           await db.collection('entries').add({ employee:user, startTime: serverTimestamp(), endTime:null, note:'', createdAt: serverTimestamp() });
         } else {
-          // GEHEN: endTime setzen
           const doc = snap.docs[0];
           await db.collection('entries').doc(doc.id).update({ endTime: new Date() });
         }
@@ -278,7 +278,7 @@
       } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
     });
     
-    // === EXPORT ===
+    // === EXPORT (LETZTER MONAT) ===
     async function exportData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
       exportBtn.disabled = true; exportBtn.querySelector('span').textContent = 'Erstelle...';
@@ -296,13 +296,8 @@
         Object.keys(byDay).sort().forEach(dayKey => {
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
-          
-          // Arbeitszeit: tatsächlich gearbeitet
           const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          // Pause: gesetzlich geforderte Dauer anzeigen
           const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
-          
-          // OUT: Bei Pausen-Defizit wird OUT-Zeit angepasst
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
@@ -312,7 +307,6 @@
             const lastEntry = dayEntries[dayEntries.length-1];
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
-          
           tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
         });
         tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
@@ -332,6 +326,52 @@
         }
       } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
       exportBtn.disabled = false; exportBtn.querySelector('span').textContent = 'Monatsauswertung';
+    }
+
+    // === EXPORT (LAUFENDER MONAT, NUR PDF) ===
+    async function exportCurrentMonthData(format) {
+      if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
+      const currentBtn = document.getElementById('currentMonthBtn');
+      currentBtn.disabled = true; currentBtn.textContent = 'Erstelle...';
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        const snap = await db.collection('entries').where('employee', '==', user).where('startTime', '>=', monthStart).where('startTime', '<=', monthEnd).get();
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+        const byDay = {};
+        entries.forEach(e => { const s = toDateSafe(e.startTime); if(!s) return; const key = fmtKey(s); if(!byDay[key]) byDay[key] = []; byDay[key].push(e); });
+        
+        const tableData = []; let totalMonth = 0;
+        Object.keys(byDay).sort().forEach(dayKey => {
+          const dayEntries = byDay[dayKey];
+          const stats = analyzeDay(dayEntries);
+          const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
+          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          let outDisplay;
+          if (stats.deficit > 0) {
+            const firstIn = toDateSafe(dayEntries[0].startTime);
+            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
+            outDisplay = fmtTime(adjustedOut);
+          } else {
+            const lastEntry = dayEntries[dayEntries.length-1];
+            outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
+          }
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
+        });
+        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+        
+        if(format === 'pdf') {
+          const { jsPDF } = window.jspdf; const doc = new jsPDF();
+          doc.setFontSize(16); doc.text(`Arbeitszeitnachweis (Laufender Monat): ${user}`, 14, 20);
+          doc.setFontSize(10); doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+          doc.autoTable({ startY: 35, head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], body: tableData, theme: 'grid', headStyles: { fillColor: [5, 150, 105] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, didDrawPage: function(data) { if (data.pageNumber === doc.internal.getNumberOfPages()) { const finalY = data.cursor.y + 10; doc.setLineWidth(0.5); doc.line(14, finalY, 90, finalY); doc.line(100, finalY, 180, finalY); doc.setFontSize(9); doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); } } });
+          await new Promise(resolve => setTimeout(resolve, 100));
+          const filename = `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; doc.save(filename);
+        }
+      } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
+      currentBtn.disabled = false; currentBtn.textContent = '📊 Laufender Monat';
     }
   </script>
 </body>
