@@ -96,4 +96,302 @@
       </div>
       <div class="row">
         <label for="location">Ort / Regal:</label>
-        <input type="text" id="location
+        <input type="text" id="location" placeholder="z.B. Regal A3">
+      </div>
+      <div class="row">
+        <label for="note">Notiz:</label>
+        <input type="text" id="note" placeholder="Optional">
+      </div>
+      <button id="addBtn" class="btn-primary">Eintrag hinzufügen</button>
+    </div>
+
+    <div class="entries" id="entriesSection" style="display: none;">
+      <h3>Letzte Einträge (Heute)</h3>
+      <div class="table-wrapper">
+        <table id="inventoryTable">
+          <thead>
+            <tr>
+              <th>Zeit</th>
+              <th>Artikel</th>
+              <th>Menge</th>
+              <th>Ort</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="4" class="loading">Lade Daten...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <button id="exportBtn" class="btn-export">📥 Als Excel exportieren</button>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script>
+    const showError = (msg) => { 
+      const el = document.getElementById('errorMsg'); 
+      el.textContent = msg; 
+      el.style.display = 'block'; 
+      document.getElementById('successMsg').style.display = 'none';
+    };
+    const showSuccess = (msg) => { 
+      const el = document.getElementById('successMsg'); 
+      el.textContent = msg; 
+      el.style.display = 'block'; 
+      document.getElementById('errorMsg').style.display = 'none';
+      setTimeout(() => el.style.display = 'none', 4000); 
+    };
+
+    const firebaseConfig = { 
+      apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", 
+      authDomain: "fengsigns-timetracker.firebaseapp.com", 
+      projectId: "fengsigns-timetracker", 
+      storageBucket: "fengsigns-timetracker.firebasestorage.app", 
+      messagingSenderId: "1035298719582", 
+      appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" 
+    };
+    firebase.initializeApp(firebaseConfig); 
+    const db = firebase.firestore(); 
+    db.settings({ ignoreUndefinedProperties: true });
+    
+    // === STAFF / DROPDOWN ===
+    let staffDB = {};
+    const sel = document.getElementById('employee');
+    const inputSection = document.getElementById('inputSection');
+    const entriesSection = document.getElementById('entriesSection');
+    const status = document.getElementById('status');
+    const tableBody = document.getElementById('tableBody');
+    const addBtn = document.getElementById('addBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    
+    let currentUser = localStorage.getItem('inv_user') || '';
+    let todayEntries = [];
+
+    async function loadStaff() {
+      try {
+        const res = await fetch('staff.json');
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        staffDB = await res.json();
+        
+        // Dropdown aus staff.json befüllen (alphabetisch sortiert)
+        const names = Object.keys(staffDB).sort((a, b) => a.localeCompare(b, 'de'));
+        sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
+                        names.map(n => `<option value="${n}">${n}</option>`).join('');
+        
+        // Gespeicherten User wiederherstellen, falls noch in staff.json
+        if(currentUser && staffDB[currentUser]) { 
+          sel.value = currentUser; 
+          handleUserChange(); 
+        } else {
+          currentUser = '';
+          localStorage.removeItem('inv_user');
+        }
+      } catch(e) { 
+        console.error('❌ staff.json Fehler:', e); 
+        showError('Mitarbeiter-Daten nicht ladbar.'); 
+      }
+    }
+    function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
+    loadStaff();
+
+    sel.addEventListener('change', handleUserChange);
+
+    function handleUserChange() {
+      currentUser = sel.value;
+      if (currentUser) {
+        localStorage.setItem('inv_user', currentUser);
+      } else {
+        localStorage.removeItem('inv_user');
+      }
+      document.getElementById('password').value = '';
+      
+      if (currentUser) {
+        status.textContent = 'Bitte Passwort eingeben';
+        status.style.color = '#4b5563';
+        inputSection.style.display = 'none';
+        entriesSection.style.display = 'none';
+      } else {
+        status.textContent = 'Bitte Mitarbeiter wählen';
+        status.style.color = '#4b5563';
+        inputSection.style.display = 'none';
+        entriesSection.style.display = 'none';
+      }
+    }
+
+    // Passwort-Check bei Eingabe
+    document.getElementById('password').addEventListener('input', async (e) => {
+      const pw = e.target.value;
+      if (currentUser && checkPassword(currentUser, pw)) {
+        status.textContent = 'Angemeldet als ' + currentUser;
+        status.style.color = '#059669';
+        inputSection.style.display = 'block';
+        entriesSection.style.display = 'block';
+        await loadTodayEntries();
+      } else if (currentUser && pw.length > 0) {
+        status.textContent = 'Falsches Passwort';
+        status.style.color = '#dc2626';
+        inputSection.style.display = 'none';
+        entriesSection.style.display = 'none';
+      } else {
+        status.textContent = 'Bitte Passwort eingeben';
+        status.style.color = '#4b5563';
+        inputSection.style.display = 'none';
+        entriesSection.style.display = 'none';
+      }
+    });
+
+    async function loadTodayEntries() {
+      if (!currentUser) return;
+      tableBody.innerHTML = '<tr><td colspan="4" class="loading">Lade Daten...</td></tr>';
+      try {
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+        
+        const snap = await db.collection('inventory')
+          .where('employee', '==', currentUser)
+          .where('timestamp', '>=', startOfDay)
+          .where('timestamp', '<', endOfDay)
+          .orderBy('timestamp', 'desc')
+          .get();
+          
+        todayEntries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTable();
+      } catch(e) {
+        console.error(e);
+        tableBody.innerHTML = '<tr><td colspan="4" class="loading">Fehler beim Laden. Index fehlt ggf.</td></tr>';
+      }
+    }
+
+    function renderTable() {
+      if (todayEntries.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="4" class="loading">Keine Einträge heute.</td></tr>';
+        return;
+      }
+      
+      tableBody.innerHTML = todayEntries.map(e => {
+        const date = e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp);
+        const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        return `
+          <tr>
+            <td>${timeStr}</td>
+            <td>${e.itemName || '-'}</td>
+            <td>${e.quantity} ${e.unit}</td>
+            <td>${e.location || '-'}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    addBtn.addEventListener('click', async () => {
+      const pw = document.getElementById('password').value;
+      if (!checkPassword(currentUser, pw)) {
+        showError('❌ Sitzung abgelaufen oder falsches Passwort.');
+        return;
+      }
+
+      const itemName = document.getElementById('itemName').value.trim();
+      const quantity = parseFloat(document.getElementById('quantity').value);
+      const unit = document.getElementById('unit').value;
+      const location = document.getElementById('location').value.trim();
+      const note = document.getElementById('note').value.trim();
+
+      if (!itemName || isNaN(quantity)) {
+        showError('Bitte Artikelname und gültige Menge eingeben.');
+        return;
+      }
+
+      addBtn.disabled = true;
+      addBtn.textContent = 'Speichere...';
+      document.getElementById('errorMsg').style.display = 'none';
+
+      try {
+        await db.collection('inventory').add({
+          employee: currentUser,
+          itemName,
+          quantity,
+          unit,
+          location,
+          note,
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        
+        showSuccess('✅ Eintrag erfolgreich gespeichert.');
+        document.getElementById('itemName').value = '';
+        document.getElementById('quantity').value = '';
+        document.getElementById('location').value = '';
+        document.getElementById('note').value = '';
+        document.getElementById('itemName').focus();
+        
+        await loadTodayEntries();
+      } catch(e) {
+        showError('Fehler beim Speichern: ' + e.message);
+      } finally {
+        addBtn.disabled = false;
+        addBtn.textContent = 'Eintrag hinzufügen';
+      }
+    });
+
+    exportBtn.addEventListener('click', () => {
+      if (todayEntries.length === 0) {
+        showError('Keine Daten zum Exportieren vorhanden.');
+        return;
+      }
+
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'Erstelle Datei...';
+
+      try {
+        const wsData = [
+          ['Datum', 'Uhrzeit', 'Mitarbeiter', 'Artikel', 'Menge', 'Einheit', 'Ort', 'Notiz']
+        ];
+
+        const sorted = [...todayEntries].sort((a, b) => {
+          const ta = a.timestamp?.toDate ? a.timestamp.toDate() : new Date(a.timestamp);
+          const tb = b.timestamp?.toDate ? b.timestamp.toDate() : new Date(b.timestamp);
+          return ta - tb;
+        });
+
+        sorted.forEach(e => {
+          const date = e.timestamp?.toDate ? e.timestamp.toDate() : new Date(e.timestamp);
+          const dateStr = date.toLocaleDateString('de-DE');
+          const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+          
+          wsData.push([
+            dateStr,
+            timeStr,
+            e.employee,
+            e.itemName,
+            e.quantity,
+            e.unit,
+            e.location || '',
+            e.note || ''
+          ]);
+        });
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        
+        ws['!cols'] = [
+          { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 25 }, 
+          { wch: 10 }, { wch: 10 }, { wch: 15 }, { wch: 20 }
+        ];
+
+        const now = new Date();
+        const filename = `Inventur_${currentUser}_${now.getDate()}-${now.getMonth()+1}-${now.getFullYear()}.xlsx`;
+        
+        XLSX.utils.book_append_sheet(wb, ws, "Inventur");
+        XLSX.writeFile(wb, filename);
+        
+        showSuccess('✅ Excel-Datei heruntergeladen.');
+      } catch(e) {
+        showError('Export-Fehler: ' + e.message);
+      } finally {
+        exportBtn.disabled = false;
+        exportBtn.textContent = '📥 Als Excel exportieren';
+      }
+    });
+  </script>
+</body>
+</html>
