@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventur</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; }
+    h1 { text-align: center; font-size: 1.5rem; margin: 0 0 0.75rem; color: #333; }
+    
+    .top-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+    .nav-btn { padding: 10px; border: 2px solid #667eea; background: white; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #667eea; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+    .nav-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+    .nav-btn.active { background: #059669; border-color: #059669; color: white; }
+
+    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+    .row label { margin: 0; white-space: nowrap; font-weight: 600; font-size: 0.9rem; color: #444; min-width: 80px; }
+    .row input, .row select { flex: 1; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
+    .row input:focus, .row select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+    
+    .btn-primary { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; transition: all 0.3s ease; width: 100%; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+    .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+    
+    .btn-export { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #059669; background: white; color: #059669; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.3s ease; margin-top: 1rem; }
+    .btn-export:hover { background: #059669; color: white; transform: translateY(-1px); }
+    .btn-export:disabled { background: #f3f4f6; border-color: #d1d5db; color: #9ca3af; cursor: not-allowed; transform: none; }
+
+    #status { text-align: center; margin: 0.5rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
+    #errorMsg { color: #dc2626; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 6px; border-radius: 6px; border: 1px solid #fecaca; display: none; }
+    #successMsg { color: #059669; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #ecfdf5; padding: 6px; border-radius: 6px; border: 1px solid #a7f3d0; display: none; }
+
+    .entries { margin-top: 1.5rem; border-top: 2px solid #eee; padding-top: 1rem; }
+    .entries h3 { margin: 0 0 0.75rem; font-size: 1rem; color: #333; }
+    
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background: #f9fafb; font-weight: 600; color: #374151; white-space: nowrap; }
+    td { color: #4b5563; }
+    .loading { color: #888; font-size: 0.85rem; text-align: center; padding: 1rem; }
+    
+    @media (max-width: 500px) { 
+      .container { padding: 15px; } 
+      .top-bar { grid-template-columns: 1fr; } 
+      .row { flex-wrap: wrap; } 
+      .row label { width: 100%; margin-bottom: 0.25rem; min-width: auto; } 
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📋 Inventur</h1>
+    
+    <div class="top-bar">
+      <a href="index.html" class="nav-btn">⏱️ Zeiterfassung</a>
+      <a href="order.html" class="nav-btn">📦 Bestellung</a>
+    </div>
+
+    <div class="row">
+      <label for="employee">Mitarbeiter:</label>
+      <select id="employee"><option value="">-- Bitte wählen --</option></select>
+    </div>
+    
+    <div class="row" id="passwordRow">
+      <label for="password">Passwort:</label>
+      <input type="password" id="password" placeholder="••••••">
+    </div>
+
+    <div id="status">Bitte Mitarbeiter wählen</div>
+    <div id="errorMsg"></div>
+    <div id="successMsg"></div>
+
+    <div id="inputSection" style="display: none;">
+      <div class="row">
+        <label for="itemName">Artikel:</label>
+        <input type="text" id="itemName" placeholder="z.B. Schrauben M6">
+      </div>
+      <div class="row">
+        <label for="quantity">Menge:</label>
+        <input type="number" id="quantity" placeholder="0" step="0.01">
+      </div>
+      <div class="row">
+        <label for="unit">Einheit:</label>
+        <select id="unit">
+          <option value="Stück">Stück</option>
+          <option value="kg">kg</option>
+          <option value="g">g</option>
+          <option value="m">m</option>
+          <option value="Packung">Packung</option>
+          <option value="Karton">Karton</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="location">Ort / Regal:</label>
+        <input type="text" id="location
