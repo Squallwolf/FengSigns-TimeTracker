@@ -14,13 +14,29 @@
     .top-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
     .nav-btn { padding: 10px; border: 2px solid #667eea; background: white; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #667eea; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
     .nav-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
-    .nav-btn.active { background: #059669; border-color: #059669; color: white; }
 
-    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
-    .row label { margin: 0; white-space: nowrap; font-weight: 600; font-size: 0.9rem; color: #444; min-width: 80px; }
-    .row input, .row select { flex: 1; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
-    .row input:focus, .row select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
-    
+    .form-group { margin-bottom: 0.75rem; }
+    .form-group label { display: block; margin-bottom: 5px; color: #444; font-weight: 600; font-size: 0.9rem; }
+    .form-group input, .form-group select { width: 100%; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+
+    /* Menge und Einheit auf einer Zeile */
+    .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; margin-bottom: 0.75rem; }
+    .row .form-group { margin-bottom: 0; }
+
+    /* Autocomplete Styles (aus order.html übernommen) */
+    .autocomplete-container { position: relative; }
+    .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #667eea; border-top: none; border-radius: 0 0 10px 10px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); display: none; }
+    .autocomplete-list.active { display: block; }
+    .autocomplete-list::-webkit-scrollbar { width: 12px; }
+    .autocomplete-list::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 6px; }
+    .autocomplete-list::-webkit-scrollbar-thumb { background: #667eea; border-radius: 6px; border: 3px solid #f1f1f1; }
+    .autocomplete-item { padding: 12px 15px; cursor: pointer; transition: background 0.2s ease; border-bottom: 1px solid #f0f0f0; }
+    .autocomplete-item:last-child { border-bottom: none; }
+    .autocomplete-item:hover { background: #e8ebf9; }
+    .autocomplete-item .article-number { font-weight: 600; color: #667eea; font-size: 0.85rem; }
+    .autocomplete-item .product-name { overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; color: #666; font-size: 14px; }
+
     .btn-primary { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; transition: all 0.3s ease; width: 100%; }
     .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
     .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
@@ -46,8 +62,7 @@
     @media (max-width: 500px) { 
       .container { padding: 15px; } 
       .top-bar { grid-template-columns: 1fr; } 
-      .row { flex-wrap: wrap; } 
-      .row label { width: 100%; margin-bottom: 0.25rem; min-width: auto; } 
+      .row { grid-template-columns: 1fr; } /* Untereinander auf sehr kleinen Bildschirmen */
     }
   </style>
 </head>
@@ -60,12 +75,12 @@
       <a href="order.html" class="nav-btn">📦 Bestellung</a>
     </div>
 
-    <div class="row">
+    <div class="form-group">
       <label for="employee">Mitarbeiter:</label>
       <select id="employee"><option value="">-- Bitte wählen --</option></select>
     </div>
     
-    <div class="row" id="passwordRow">
+    <div class="form-group" id="passwordRow">
       <label for="password">Passwort:</label>
       <input type="password" id="password" placeholder="••••••">
     </div>
@@ -75,30 +90,38 @@
     <div id="successMsg"></div>
 
     <div id="inputSection" style="display: none;">
-      <div class="row">
+      <div class="form-group">
         <label for="itemName">Artikel:</label>
-        <input type="text" id="itemName" placeholder="z.B. Schrauben M6">
+        <div class="autocomplete-container">
+          <input type="text" id="itemName" placeholder="z.B. Schrauben M6" autocomplete="off">
+          <div id="itemAutocomplete" class="autocomplete-list"></div>
+        </div>
       </div>
+      
+      <!-- Menge und Einheit auf einer Zeile -->
       <div class="row">
-        <label for="quantity">Menge:</label>
-        <input type="number" id="quantity" placeholder="0" step="0.01">
+        <div class="form-group">
+          <label for="quantity">Menge:</label>
+          <input type="number" id="quantity" placeholder="0" step="0.01">
+        </div>
+        <div class="form-group">
+          <label for="unit">Einheit:</label>
+          <select id="unit">
+            <option value="Stück">Stück</option>
+            <option value="kg">kg</option>
+            <option value="g">g</option>
+            <option value="m">m</option>
+            <option value="Packung">Packung</option>
+            <option value="Karton">Karton</option>
+          </select>
+        </div>
       </div>
-      <div class="row">
-        <label for="unit">Einheit:</label>
-        <select id="unit">
-          <option value="Stück">Stück</option>
-          <option value="kg">kg</option>
-          <option value="g">g</option>
-          <option value="m">m</option>
-          <option value="Packung">Packung</option>
-          <option value="Karton">Karton</option>
-        </select>
-      </div>
-      <div class="row">
+
+      <div class="form-group">
         <label for="location">Ort / Regal:</label>
         <input type="text" id="location" placeholder="z.B. Regal A3">
       </div>
-      <div class="row">
+      <div class="form-group">
         <label for="note">Notiz:</label>
         <input type="text" id="note" placeholder="Optional">
       </div>
@@ -155,8 +178,8 @@
     const db = firebase.firestore(); 
     db.settings({ ignoreUndefinedProperties: true });
     
-    // === STAFF / DROPDOWN ===
     let staffDB = {};
+    let productsDB = [];
     const sel = document.getElementById('employee');
     const inputSection = document.getElementById('inputSection');
     const entriesSection = document.getElementById('entriesSection');
@@ -173,13 +196,9 @@
         const res = await fetch('staff.json');
         if(!res.ok) throw new Error('HTTP '+res.status);
         staffDB = await res.json();
-        
-        // Dropdown aus staff.json befüllen (alphabetisch sortiert)
         const names = Object.keys(staffDB).sort((a, b) => a.localeCompare(b, 'de'));
         sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
                         names.map(n => `<option value="${n}">${n}</option>`).join('');
-        
-        // Gespeicherten User wiederherstellen, falls noch in staff.json
         if(currentUser && staffDB[currentUser]) { 
           sel.value = currentUser; 
           handleUserChange(); 
@@ -192,8 +211,23 @@
         showError('Mitarbeiter-Daten nicht ladbar.'); 
       }
     }
+
+    async function loadProducts() {
+      try {
+        const response = await fetch('products.json');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        productsDB = await response.json();
+        console.log('✅ Produkte geladen:', productsDB.length);
+      } catch (err) {
+        console.error('❌ Fehler beim Laden von products.json:', err);
+      }
+    }
+
     function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
+    
+    // Initialisierung
     loadStaff();
+    loadProducts();
 
     sel.addEventListener('change', handleUserChange);
 
@@ -219,7 +253,6 @@
       }
     }
 
-    // Passwort-Check bei Eingabe
     document.getElementById('password').addEventListener('input', async (e) => {
       const pw = e.target.value;
       if (currentUser && checkPassword(currentUser, pw)) {
@@ -241,6 +274,51 @@
       }
     });
 
+    // === AUTOCOMPLETE LOGIK ===
+    const itemNameInput = document.getElementById('itemName');
+    const itemAutocomplete = document.getElementById('itemAutocomplete');
+
+    itemNameInput.addEventListener('input', function() {
+      const value = this.value.toLowerCase().trim();
+      itemAutocomplete.innerHTML = '';
+      if (value.length === 0) {
+        itemAutocomplete.classList.remove('active');
+        return;
+      }
+      
+      const filtered = productsDB.filter(product => 
+        product.productName.toLowerCase().includes(value) || 
+        (product.articleNumber && product.articleNumber.toLowerCase().includes(value))
+      );
+
+      if (filtered.length > 0) {
+        filtered.forEach(product => {
+          const div = document.createElement('div');
+          div.className = 'autocomplete-item';
+          div.innerHTML = `
+            <div class="article-number">${product.articleNumber || 'Keine Nr.'}</div>
+            <div class="product-name">${product.productName}</div>
+          `;
+          div.addEventListener('click', function() {
+            itemNameInput.value = product.productName;
+            itemAutocomplete.classList.remove('active');
+          });
+          itemAutocomplete.appendChild(div);
+        });
+        itemAutocomplete.classList.add('active');
+      } else {
+        itemAutocomplete.classList.remove('active');
+      }
+    });
+
+    // Schließt Autocomplete bei Klick außerhalb
+    document.addEventListener('click', function(e) {
+      if (!itemNameInput.contains(e.target) && !itemAutocomplete.contains(e.target)) {
+        itemAutocomplete.classList.remove('active');
+      }
+    });
+
+    // === FIRESTORE & EXPORT LOGIK ===
     async function loadTodayEntries() {
       if (!currentUser) return;
       tableBody.innerHTML = '<tr><td colspan="4" class="loading">Lade Daten...</td></tr>';
