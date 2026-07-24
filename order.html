@@ -6,6 +6,17 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
     <title>Lager Bestellung</title>
     <style>
+        .order-card.vorbereitet { 
+            cursor: pointer; 
+            transition: transform 0.2s, box-shadow 0.2s, opacity 0.3s; 
+        }
+        .order-card.vorbereitet:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3); 
+        }
+        .order-card.vorbereitet:active { 
+            transform: scale(0.98); 
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; overflow-x: hidden; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
         .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; }
@@ -111,8 +122,91 @@
 });
     let currentFilter = 'all';
     function getRelativeDeliveryLabel(deliveryDate) { if (!deliveryDate) return 'Unbekannt'; const delivery = deliveryDate.toDate ? deliveryDate.toDate() : deliveryDate; return delivery.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); }
-    function loadOrders() { db.collection('orders').onSnapshot((snapshot) => { const ordersList = document.getElementById('ordersList'); if (snapshot.empty) { ordersList.innerHTML = '<div class="no-orders">Keine Bestellungen vorhanden</div>'; return; } let orders = []; snapshot.forEach((doc) => { const order = { id: doc.id, ...doc.data() }; 
-    if (order.status === 'aufgebraucht' || order.status === 'fehlend') return; 
+        function loadOrders() { 
+        db.collection('orders').onSnapshot((snapshot) => { 
+            const ordersList = document.getElementById('ordersList'); 
+            if (snapshot.empty) { 
+                ordersList.innerHTML = '<div class="no-orders">Keine Bestellungen vorhanden</div>'; 
+                return; 
+            } 
+            
+            let orders = []; 
+            snapshot.forEach((doc) => { 
+                const order = { id: doc.id, ...doc.data() }; 
+                if (order.status === 'aufgebraucht' || order.status === 'fehlend') return; 
+                if (currentFilter === 'offen' && order.status !== 'offen') return; 
+                if (currentFilter === 'vorbereitet' && order.status !== 'vorbereitet') return; 
+                if (currentFilter === 'all' && order.status === 'erledigt') return;
+                orders.push(order); 
+            }); 
+            
+            // Sortierung NACH der Schleife (Performance & Korrektheit)
+            orders.sort((a, b) => { 
+                const aTs = a.timestamp?.seconds || a.timestamp?.toDate?.()?.getTime?.() || 0;
+                const bTs = b.timestamp?.seconds || b.timestamp?.toDate?.()?.getTime?.() || 0;
+                return bTs - aTs;
+            });
+
+            ordersList.innerHTML = ''; 
+            
+            if (orders.length === 0) { 
+                ordersList.innerHTML = '<div class="no-orders">Keine Bestellungen in dieser Kategorie</div>'; 
+                return; 
+            }
+
+            orders.forEach((order) => { 
+                const card = document.createElement('div'); 
+                card.className = `order-card ${order.status}`; 
+                const statusText = order.status === 'offen' ? 'Offen' : 'Vorbereitet'; 
+                const deliveryDisplay = getRelativeDeliveryLabel(order.timestamp); 
+                
+                card.innerHTML = `
+                    <div class="order-header">
+                        <div class="order-product">${order.productName}</div>
+                        <div class="order-quantity">${order.quantity}&nbsp;${order.unit}</div>
+                        <div class="order-status ${order.status}">${statusText}</div>
+                    </div>
+                    <div class="order-details">Art-Nr: ${order.articleNumber}</div>
+                    <div class="comment-section" style="margin-top:8px;">
+                        <button class="toggle-comment" data-id="${order.id}" style="font-size:12px; padding:4px 8px; background:#eee; border:1px solid #ccc; border-radius:4px; cursor:pointer;">💬 Notiz</button>
+                        <div class="comment-editor" data-id="${order.id}" style="display:none; margin-top:6px;">
+                            <textarea class="comment-input" data-id="${order.id}" style="width:100%; padding:6px; font-size:14px; border:1px solid #ccc; border-radius:4px;" rows="2">${order.comment || ''}</textarea>
+                            <div style="margin-top:4px;">
+                                <button class="save-comment" data-id="${order.id}" style="padding:4px 8px; background:#667eea; color:white; border:none; border-radius:4px; font-size:12px;">Sichern</button>
+                                <button class="cancel-comment" data-id="${order.id}" style="padding:4px 8px; background:#ccc; border:none; border-radius:4px; font-size:12px; margin-left:6px;">Abbrechen</button>
+                            </div>
+                        </div>
+                    </div>`; 
+                
+                // === NEU: Klick-Logik für "vorbereitet" ===
+                if (order.status === 'vorbereitet') {
+                    card.title = 'Klicken, um Erhalt zu bestätigen';
+                    card.addEventListener('click', async (e) => {
+                        // Verhindern, dass der Klick feuert, wenn eigentlich die Notiz-Funktion genutzt wird
+                        if (e.target.closest('.comment-section') || e.target.closest('button')) return;
+
+                        if (confirm(`"${order.productName}" (${order.quantity} ${order.unit}) als erhalten/erledigt markieren?`)) {
+                            try {
+                                card.style.opacity = '0.5'; // Visuelles Feedback
+                                await db.collection('orders').doc(order.id).update({ status: 'erledigt' });
+                                card.remove(); // Sofort aus der DOM entfernen
+                            } catch (error) { 
+                                console.error('Fehler beim Aktualisieren:', error); 
+                                alert('Fehler: Status konnte nicht geändert werden.'); 
+                                card.style.opacity = '1';
+                            } 
+                        }
+                    });
+                }
+
+                ordersList.appendChild(card); 
+            }); 
+        }, (error) => { 
+            console.error('Fehler beim Laden:', error); 
+            document.getElementById('ordersList').innerHTML = `<div class="no-orders">Fehler: ${error.message}</div>`; 
+        }); 
+    }
+      if (order.status === 'aufgebraucht' || order.status === 'fehlend') return; 
     if (currentFilter === 'offen' && order.status !== 'offen') return; 
     if (currentFilter === 'vorbereitet' && order.status !== 'vorbereitet') return; 
     if (currentFilter === 'all' && order.status === 'erledigt') return;
