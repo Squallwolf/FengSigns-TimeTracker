@@ -126,7 +126,7 @@
     loadStaff();
     
     // === UI ELEMENTS ===
-    const employees = ["Andrea", "Leonie", "Natalie", "Rebekka", "Stephan"];
+    const employees = Object.keys(staffDB);
     const sel = document.getElementById('employee'), btn = document.getElementById('stampBtn'), status = document.getElementById('status'), errorMsg = document.getElementById('errorMsg'), warningMsg = document.getElementById('warningMsg'), list = document.getElementById('entryList'), rangeFilter = document.getElementById('rangeFilter'), exportBtn = document.getElementById('exportBtn'), exportArrow = document.getElementById('exportArrow'), exportDropdown = document.getElementById('exportDropdown'), exportOptions = document.querySelectorAll('.export-option');
     let user = localStorage.getItem('tz_user') || '', allEntries = [], selectedFormat = 'pdf';
     const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
