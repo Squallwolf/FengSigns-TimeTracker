@@ -68,6 +68,7 @@
     <h1>📦 Lager Bestellung</h1>
     <p class="subtitle">Artikel aktualisiert: 25.05.26</p>
     <div id="successMessage" class="success-message">✓ Bestellung erfolgreich übermittelt!</div>
+    <div id="errorMessage" style="display: none; background: #f44336; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: 600;"></div>
     <form id="orderForm">
       <div class="form-group"><label for="articleNumber">Artikelnummer *</label><div class="autocomplete-container"><input type="text" id="articleNumber" name="articleNumber" required placeholder="z.B. 1712" autocomplete="off"><div id="articleAutocomplete" class="autocomplete-list"></div></div></div>
       <div class="form-group"><label for="productName">Produktname *</label><div class="autocomplete-container"><input type="text" id="productName" name="productName" required placeholder="z.B. Armband" autocomplete="off"><div id="productAutocomplete" class="autocomplete-list"></div></div></div>
@@ -145,26 +146,58 @@
     const form = document.getElementById('orderForm');
     const successMessage = document.getElementById('successMessage');
 
-    form.addEventListener('submit', async function(e) {
+        form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
+        const articleNumber = document.getElementById('articleNumber').value.trim();
+        const productName = document.getElementById('productName').value.trim();
+        const quantity = parseFloat(document.getElementById('quantity').value);
+        const unit = document.getElementById('unit').value;
+        const errorMsg = document.getElementById('errorMessage');
+
+        // 1. Prüfen, ob der Artikel bereits als "fehlend" markiert ist
+        try {
+            const missingCheck = await db.collection('orders')
+                .where('articleNumber', '==', articleNumber)
+                .where('status', '==', 'fehlend')
+                .get();
+
+            if (!missingCheck.empty) {
+                errorMsg.textContent = `⚠️ "${productName}" (Art-Nr: ${articleNumber}) ist zur Zeit nicht verfügbar!`;
+                errorMsg.style.display = 'block';
+                setTimeout(() => { errorMsg.style.display = 'none'; }, 5000);
+                return; // Abbrechen, keinen neuen Eintrag erstellen
+            }
+        } catch (error) {
+            console.error('Fehler bei der Verfügbarkeitsprüfung:', error);
+        }
+
+        // 2. Normaler Bestellvorgang, wenn nicht fehlend
         const formData = {
-            articleNumber: document.getElementById('articleNumber').value,
-            productName: document.getElementById('productName').value,
-            quantity: parseFloat(document.getElementById('quantity').value),
-            unit: document.getElementById('unit').value,
+            articleNumber: articleNumber,
+            productName: productName,
+            quantity: quantity,
+            unit: unit,
             timestamp: firebase.firestore.FieldValue.serverTimestamp(),
             status: 'offen'
         };
+
         try {
             const docRef = await db.collection('orders').add(formData);
             successMessage.textContent = '✓ Bestellung erfolgreich übermittelt! (ID: ' + docRef.id + ')';
             successMessage.style.display = 'block';
+            errorMsg.style.display = 'none'; // Sicherstellen, dass Fehlermeldung ausgeblendet ist
+            
             document.getElementById('articleNumber').value = '';
             document.getElementById('productName').value = '';
             document.getElementById('quantity').value = '';
             document.getElementById('unit').value = '';
             document.getElementById('articleNumber').focus();
-            setTimeout(() => { successMessage.style.display = 'none'; successMessage.textContent = '✓ Bestellung erfolgreich übermittelt!'; }, 5000);
+            
+            setTimeout(() => { 
+                successMessage.style.display = 'none'; 
+                successMessage.textContent = '✓ Bestellung erfolgreich übermittelt!'; 
+            }, 5000);
         } catch (error) {
             console.error('Firestore-Fehler:', error);
             alert('Fehler beim Übermitteln: ' + error.message);
