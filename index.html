@@ -117,16 +117,19 @@
     async function loadStaff() {
       try {
         const res = await fetch('staff.json');
-        if(!res.ok) throw new Error('HTTP '+res.status);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         staffDB = await res.json();
         console.log('✅ Staff geladen:', Object.keys(staffDB).length);
-      } catch(e) { console.error('❌ staff.json Fehler:', e); showError('Mitarbeiter-Daten nicht ladbar.'); }
+        populateEmployeeDropdown(); // Dropdown erst nach erfolgreichem Laden befüllen
+      } catch (e) { 
+        console.error('❌ staff.json Fehler:', e); 
+        showError('Mitarbeiter-Daten nicht ladbar.'); 
+      }
     }
     function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
     loadStaff();
     
     // === UI ELEMENTS ===
-    const employees = ["Andrea","Leonie","Natalie","Rebekka","Stephan"];
     const sel = document.getElementById('employee'), btn = document.getElementById('stampBtn'), status = document.getElementById('status'), errorMsg = document.getElementById('errorMsg'), warningMsg = document.getElementById('warningMsg'), list = document.getElementById('entryList'), rangeFilter = document.getElementById('rangeFilter'), exportBtn = document.getElementById('exportBtn'), exportArrow = document.getElementById('exportArrow'), exportDropdown = document.getElementById('exportDropdown'), exportOptions = document.querySelectorAll('.export-option');
     let user = localStorage.getItem('tz_user') || '', allEntries = [], selectedFormat = 'pdf';
     const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
@@ -135,10 +138,20 @@
     sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join(''); sel.disabled = false;
     if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
     
-    sel.addEventListener('change', () => {
-      user = sel.value; localStorage.setItem('tz_user', user);
-      const pwInput = document.getElementById('password'); if(pwInput) pwInput.value = '';
-      if(user) loadUserState(); else { btn.disabled = true; status.textContent = "Bitte wählen"; list.innerHTML = '<div class="loading">Warte...</div>'; }
+        sel.addEventListener('change', () => {
+      user = sel.value; 
+      localStorage.setItem('tz_user', user);
+      const pwInput = document.getElementById('password'); 
+      if (pwInput) pwInput.value = '';
+      
+      // Prüfe dynamisch gegen die geladenen Keys
+      if (user && Object.keys(staffDB).includes(user)) {
+        loadUserState(); 
+      } else { 
+        btn.disabled = true; 
+        status.textContent = "Bitte wählen"; 
+        list.innerHTML = '<div class="loading">Warte...</div>'; 
+      }
     });
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
     
