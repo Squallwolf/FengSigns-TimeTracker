@@ -114,6 +114,18 @@
     
     // === STAFF / PASSWORD ===
     let staffDB = {};
+    function populateEmployeeDropdown() {
+      const employeeNames = Object.keys(staffDB);
+      sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
+                      employeeNames.map(n => `<option value="${n}">${n}</option>`).join('');
+      sel.disabled = false;
+      
+      // Vorherige Auswahl wiederherstellen, falls gültig
+      if (user && employeeNames.includes(user)) { 
+        sel.value = user; 
+        loadUserState(); 
+      }
+    }
     async function loadStaff() {
       try {
         const res = await fetch('staff.json');
