@@ -29,7 +29,6 @@
         .loading { text-align: center; padding: 20px; color: #64748b; }
         .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
         
-        /* Modal */
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal.active { display: flex; }
         .modal-content { background: white; border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
@@ -60,7 +59,6 @@
     </div>
   </div>
 
-  <!-- Edit Modal -->
   <div id="editModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">Zeiten bearbeiten</div>
@@ -212,28 +210,57 @@
             return sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0);
           }, 0);
 
-          entries.forEach((entry, index) => {
-            const isLast = index === entries.length - 1;
-            const nextEntry = entries[index + 1];
-
-            const tag = index === 0 ? fmtDateShort(dateKey) : '';
-            const inTime = fmtTime(entry.startTime);
-            const pauseIn = fmtTime(entry.endTime);
-            const pauseOut = nextEntry ? fmtTime(nextEntry.startTime) : '';
-            const outTime = isLast ? fmtTime(entry.endTime) : '';
-            const hours = isLast ? fmtDur(Math.floor(totalMin)) : '';
-            const editBtn = index === 0 ? `<button class="edit-btn" onclick="openEditModal('${dateKey}')">✏️</button>` : '';
-
+          // Neue Logik: 1 oder 2 Datensätze = eine Zeile, 3+ = mehrere Zeilen
+          if (entries.length === 1) {
+            // Nur 1 Datensatz: In und Out, keine Pause
+            const entry = entries[0];
             html += `<tr>
-              <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
-              <td>${inTime}</td>
-              <td>${pauseIn}</td>
-              <td>${pauseOut}</td>
-              <td>${outTime}</td>
-              <td class="total-cell">${hours}</td>
-              <td>${editBtn}</td>
+              <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+              <td>${fmtTime(entry.startTime)}</td>
+              <td>-</td>
+              <td>-</td>
+              <td>${fmtTime(entry.endTime)}</td>
+              <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+              <td><button class="edit-btn" onclick="openEditModal('${dateKey}')">✏️</button></td>
             </tr>`;
-          });
+          } else if (entries.length === 2) {
+            // 2 Datensätze: D1 = In + Pause In, D2 = Pause Out + Out
+            const d1 = entries[0];
+            const d2 = entries[1];
+            html += `<tr>
+              <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+              <td>${fmtTime(d1.startTime)}</td>
+              <td>${fmtTime(d1.endTime)}</td>
+              <td>${fmtTime(d2.startTime)}</td>
+              <td>${fmtTime(d2.endTime)}</td>
+              <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+              <td><button class="edit-btn" onclick="openEditModal('${dateKey}')">✏️</button></td>
+            </tr>`;
+          } else {
+            // 3+ Datensätze: Mehrere Zeilen wie bisher
+            entries.forEach((entry, index) => {
+              const isLast = index === entries.length - 1;
+              const nextEntry = entries[index + 1];
+
+              const tag = index === 0 ? fmtDateShort(dateKey) : '';
+              const inTime = fmtTime(entry.startTime);
+              const pauseIn = fmtTime(entry.endTime);
+              const pauseOut = nextEntry ? fmtTime(nextEntry.startTime) : '';
+              const outTime = isLast ? fmtTime(entry.endTime) : '';
+              const hours = isLast ? fmtDur(Math.floor(totalMin)) : '';
+              const editBtn = index === 0 ? `<button class="edit-btn" onclick="openEditModal('${dateKey}')">✏️</button>` : '';
+
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+                <td>${inTime}</td>
+                <td>${pauseIn}</td>
+                <td>${pauseOut}</td>
+                <td>${outTime}</td>
+                <td class="total-cell">${hours}</td>
+                <td>${editBtn}</td>
+              </tr>`;
+            });
+          }
         }
 
         html += '</tbody></table>';
@@ -256,13 +283,25 @@
 
       if (dayEntries.length === 0) return;
 
-      const first = dayEntries[0];
-      const last = dayEntries[dayEntries.length - 1];
-
-      document.getElementById('editIn').value = toDateSafe(first.startTime).toTimeString().slice(0, 5);
-      document.getElementById('editPauseIn').value = toDateSafe(first.endTime).toTimeString().slice(0, 5);
-      document.getElementById('editPauseOut').value = dayEntries.length > 1 ? toDateSafe(dayEntries[1].startTime).toTimeString().slice(0, 5) : '';
-      document.getElementById('editOut').value = toDateSafe(last.endTime).toTimeString().slice(0, 5);
+      if (dayEntries.length === 1) {
+        // Nur 1 Datensatz
+        document.getElementById('editIn').value = toDateSafe(dayEntries[0].startTime).toTimeString().slice(0, 5);
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = toDateSafe(dayEntries[0].endTime).toTimeString().slice(0, 5);
+      } else if (dayEntries.length === 2) {
+        // 2 Datensätze
+        document.getElementById('editIn').value = toDateSafe(dayEntries[0].startTime).toTimeString().slice(0, 5);
+        document.getElementById('editPauseIn').value = toDateSafe(dayEntries[0].endTime).toTimeString().slice(0, 5);
+        document.getElementById('editPauseOut').value = toDateSafe(dayEntries[1].startTime).toTimeString().slice(0, 5);
+        document.getElementById('editOut').value = toDateSafe(dayEntries[1].endTime).toTimeString().slice(0, 5);
+      } else {
+        // 3+ Datensätze: Nur erste und letzte Zeit editierbar
+        document.getElementById('editIn').value = toDateSafe(dayEntries[0].startTime).toTimeString().slice(0, 5);
+        document.getElementById('editPauseIn').value = toDateSafe(dayEntries[0].endTime).toTimeString().slice(0, 5);
+        document.getElementById('editPauseOut').value = toDateSafe(dayEntries[1].startTime).toTimeString().slice(0, 5);
+        document.getElementById('editOut').value = toDateSafe(dayEntries[dayEntries.length - 1].endTime).toTimeString().slice(0, 5);
+      }
 
       document.getElementById('editModal').classList.add('active');
     }
@@ -290,23 +329,37 @@
       try {
         const baseDate = toDateSafe(dayEntries[0].startTime);
         
-        // Update first entry (In -> Pause In)
-        const newStart = new Date(baseDate);
-        const [h1, m1] = inTime.split(':');
-        newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
-        await db.collection('entries').doc(dayEntries[0].id).update({
-          startTime: firebase.firestore.Timestamp.fromDate(newStart)
-        });
+        if (dayEntries.length === 1) {
+          // Nur 1 Datensatz: In und Out
+          const newStart = new Date(baseDate);
+          const [h1, m1] = inTime.split(':');
+          newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            startTime: firebase.firestore.Timestamp.fromDate(newStart)
+          });
 
-        const newEnd1 = new Date(baseDate);
-        const [h2, m2] = pauseInTime.split(':');
-        newEnd1.setHours(parseInt(h2), parseInt(m2), 0, 0);
-        await db.collection('entries').doc(dayEntries[0].id).update({
-          endTime: firebase.firestore.Timestamp.fromDate(newEnd1)
-        });
+          const newEnd = new Date(baseDate);
+          const [h4, m4] = outTime.split(':');
+          newEnd.setHours(parseInt(h4), parseInt(m4), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            endTime: firebase.firestore.Timestamp.fromDate(newEnd)
+          });
+        } else if (dayEntries.length === 2) {
+          // 2 Datensätze
+          const newStart1 = new Date(baseDate);
+          const [h1, m1] = inTime.split(':');
+          newStart1.setHours(parseInt(h1), parseInt(m1), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            startTime: firebase.firestore.Timestamp.fromDate(newStart1)
+          });
 
-        // Update second entry if exists (Pause Out -> Out)
-        if (dayEntries.length > 1) {
+          const newEnd1 = new Date(baseDate);
+          const [h2, m2] = pauseInTime.split(':');
+          newEnd1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            endTime: firebase.firestore.Timestamp.fromDate(newEnd1)
+          });
+
           const newStart2 = new Date(baseDate);
           const [h3, m3] = pauseOutTime.split(':');
           newStart2.setHours(parseInt(h3), parseInt(m3), 0, 0);
@@ -317,15 +370,22 @@
           const newEnd2 = new Date(baseDate);
           const [h4, m4] = outTime.split(':');
           newEnd2.setHours(parseInt(h4), parseInt(m4), 0, 0);
-          await db.collection('entries').doc(dayEntries[dayEntries.length - 1].id).update({
+          await db.collection('entries').doc(dayEntries[1].id).update({
             endTime: firebase.firestore.Timestamp.fromDate(newEnd2)
           });
         } else {
-          // Only one entry, update Out time
+          // 3+ Datensätze: Nur erste und letzte Zeit
+          const newStart = new Date(baseDate);
+          const [h1, m1] = inTime.split(':');
+          newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            startTime: firebase.firestore.Timestamp.fromDate(newStart)
+          });
+
           const newEnd = new Date(baseDate);
           const [h4, m4] = outTime.split(':');
           newEnd.setHours(parseInt(h4), parseInt(m4), 0, 0);
-          await db.collection('entries').doc(dayEntries[0].id).update({
+          await db.collection('entries').doc(dayEntries[dayEntries.length - 1].id).update({
             endTime: firebase.firestore.Timestamp.fromDate(newEnd)
           });
         }
