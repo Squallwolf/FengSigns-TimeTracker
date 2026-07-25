@@ -307,8 +307,6 @@
             </tr>`;
           }
         }
-          }
-        }
 
         html += '</tbody></table>';
         tableContainer.innerHTML = html;
@@ -317,6 +315,8 @@
         console.error(e);
         showError('Fehler beim Laden: ' + e.message);
       }
+    }
+ }
     }
 
     let editMode = '';
