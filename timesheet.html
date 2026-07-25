@@ -16,15 +16,31 @@
         .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; }
         
         .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 450px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 500px; }
         th { background: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; }
         td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; }
         tr:last-child td { border-bottom: none; }
         .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
         .empty-day { color: #94a3b8; font-style: italic; text-align: center; padding: 20px; }
         
+        .edit-btn { background: #fbbf24; color: #1f2937; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .edit-btn:hover { background: #f59e0b; }
+        
         .loading { text-align: center; padding: 20px; color: #64748b; }
         .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+        
+        /* Modal */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .modal-field input { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+        .modal-btn.save { background: #667eea; color: white; }
+        .modal-btn.cancel { background: #e0e0e0; color: #333; }
     </style>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
@@ -35,12 +51,39 @@
     
     <div class="controls">
       <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
-      <a href="order.html" class="back-btn">← Zurück</a>
+      <a href="index.html" class="back-btn">← Zurück</a>
     </div>
 
     <div id="errorMsg" class="error"></div>
     <div id="tableContainer" class="table-wrapper">
       <div class="loading">Bitte Mitarbeiter auswählen...</div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">Zeiten bearbeiten</div>
+      <div class="modal-field">
+        <label>Kommen (In)</label>
+        <input type="time" id="editIn">
+      </div>
+      <div class="modal-field">
+        <label>Pause Start (Pause In)</label>
+        <input type="time" id="editPauseIn">
+      </div>
+      <div class="modal-field">
+        <label>Pause Ende (Pause Out)</label>
+        <input type="time" id="editPauseOut">
+      </div>
+      <div class="modal-field">
+        <label>Gehen (Out)</label>
+        <input type="time" id="editOut">
+      </div>
+      <div class="modal-buttons">
+        <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
+        <button class="modal-btn save" onclick="saveEdits()">Speichern</button>
+      </div>
     </div>
   </div>
 
@@ -50,11 +93,11 @@
     const db = firebase.firestore();
 
     let staffDB = {};
+    let currentEntries = [];
     const employeeSelect = document.getElementById('employeeSelect');
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
 
-    // 1. Staff laden
     async function loadStaff() {
       try {
         const res = await fetch('staff.json');
@@ -73,7 +116,6 @@
       }
     }
 
-    // 2. Helper Funktionen
     function toDateSafe(val) {
       if (!val) return null;
       if (val.toDate) return val.toDate();
@@ -103,7 +145,6 @@
       tableContainer.innerHTML = '';
     }
 
-    // 3. Hauptlogik: Zeiten laden und gruppieren
     async function loadTimesheet(user) {
       if (!user) {
         tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
@@ -130,7 +171,7 @@
           return;
         }
 
-        // Gruppieren nach Tag (YYYY-MM-DD)
+        currentEntries = [];
         const byDay = {};
         snap.forEach(doc => {
           const data = doc.data();
@@ -138,23 +179,28 @@
           if (!start) return;
           const dateKey = start.toISOString().slice(0, 10);
           
-          if (!byDay[dateKey]) byDay[dateKey] = [];
-          byDay[dateKey].push({
+          const entry = {
+            id: doc.id,
             startTime: data.startTime,
             endTime: data.endTime,
             startMs: start.getTime(),
             endMs: data.endTime ? toDateSafe(data.endTime).getTime() : start.getTime()
-          });
+          };
+          
+          currentEntries.push(entry);
+          
+          if (!byDay[dateKey]) byDay[dateKey] = [];
+          byDay[dateKey].push(entry);
         });
 
-        // Tabelle aufbauen
         let html = `<table><thead><tr>
-          <th style="width:15%">Tag</th>
-          <th style="width:17%">In</th>
-          <th style="width:17%">Pause In</th>
-          <th style="width:17%">Pause Out</th>
-          <th style="width:17%">Out</th>
-          <th style="width:17%; text-align:right;">Stunden</th>
+          <th style="width:13%">Tag</th>
+          <th style="width:15%">In</th>
+          <th style="width:15%">Pause In</th>
+          <th style="width:15%">Pause Out</th>
+          <th style="width:15%">Out</th>
+          <th style="width:15%; text-align:right;">Stunden</th>
+          <th style="width:12%"></th>
         </tr></thead><tbody>`;
 
         const sortedDays = Object.keys(byDay).sort();
@@ -162,7 +208,6 @@
         for (const dateKey of sortedDays) {
           const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
           
-          // Gesamtzeit des Tages berechnen
           const totalMin = entries.reduce((sum, e) => {
             return sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0);
           }, 0);
@@ -177,6 +222,7 @@
             const pauseOut = nextEntry ? fmtTime(nextEntry.startTime) : '';
             const outTime = isLast ? fmtTime(entry.endTime) : '';
             const hours = isLast ? fmtDur(Math.floor(totalMin)) : '';
+            const editBtn = index === 0 ? `<button class="edit-btn" onclick="openEditModal('${dateKey}')">✏️</button>` : '';
 
             html += `<tr>
               <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
@@ -185,6 +231,7 @@
               <td>${pauseOut}</td>
               <td>${outTime}</td>
               <td class="total-cell">${hours}</td>
+              <td>${editBtn}</td>
             </tr>`;
           });
         }
@@ -195,6 +242,99 @@
       } catch (e) {
         console.error(e);
         showError('Fehler beim Laden: ' + e.message);
+      }
+    }
+
+    let editingDateKey = null;
+
+    function openEditModal(dateKey) {
+      editingDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => {
+        const start = toDateSafe(e.startTime);
+        return start && start.toISOString().slice(0, 10) === dateKey;
+      }).sort((a, b) => a.startMs - b.startMs);
+
+      if (dayEntries.length === 0) return;
+
+      const first = dayEntries[0];
+      const last = dayEntries[dayEntries.length - 1];
+
+      document.getElementById('editIn').value = toDateSafe(first.startTime).toTimeString().slice(0, 5);
+      document.getElementById('editPauseIn').value = toDateSafe(first.endTime).toTimeString().slice(0, 5);
+      document.getElementById('editPauseOut').value = dayEntries.length > 1 ? toDateSafe(dayEntries[1].startTime).toTimeString().slice(0, 5) : '';
+      document.getElementById('editOut').value = toDateSafe(last.endTime).toTimeString().slice(0, 5);
+
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').classList.remove('active');
+      editingDateKey = null;
+    }
+
+    async function saveEdits() {
+      if (!editingDateKey) return;
+
+      const dayEntries = currentEntries.filter(e => {
+        const start = toDateSafe(e.startTime);
+        return start && start.toISOString().slice(0, 10) === editingDateKey;
+      }).sort((a, b) => a.startMs - b.startMs);
+
+      if (dayEntries.length === 0) return;
+
+      const inTime = document.getElementById('editIn').value;
+      const pauseInTime = document.getElementById('editPauseIn').value;
+      const pauseOutTime = document.getElementById('editPauseOut').value;
+      const outTime = document.getElementById('editOut').value;
+
+      try {
+        const baseDate = toDateSafe(dayEntries[0].startTime);
+        
+        // Update first entry (In -> Pause In)
+        const newStart = new Date(baseDate);
+        const [h1, m1] = inTime.split(':');
+        newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+        await db.collection('entries').doc(dayEntries[0].id).update({
+          startTime: firebase.firestore.Timestamp.fromDate(newStart)
+        });
+
+        const newEnd1 = new Date(baseDate);
+        const [h2, m2] = pauseInTime.split(':');
+        newEnd1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+        await db.collection('entries').doc(dayEntries[0].id).update({
+          endTime: firebase.firestore.Timestamp.fromDate(newEnd1)
+        });
+
+        // Update second entry if exists (Pause Out -> Out)
+        if (dayEntries.length > 1) {
+          const newStart2 = new Date(baseDate);
+          const [h3, m3] = pauseOutTime.split(':');
+          newStart2.setHours(parseInt(h3), parseInt(m3), 0, 0);
+          await db.collection('entries').doc(dayEntries[1].id).update({
+            startTime: firebase.firestore.Timestamp.fromDate(newStart2)
+          });
+
+          const newEnd2 = new Date(baseDate);
+          const [h4, m4] = outTime.split(':');
+          newEnd2.setHours(parseInt(h4), parseInt(m4), 0, 0);
+          await db.collection('entries').doc(dayEntries[dayEntries.length - 1].id).update({
+            endTime: firebase.firestore.Timestamp.fromDate(newEnd2)
+          });
+        } else {
+          // Only one entry, update Out time
+          const newEnd = new Date(baseDate);
+          const [h4, m4] = outTime.split(':');
+          newEnd.setHours(parseInt(h4), parseInt(m4), 0, 0);
+          await db.collection('entries').doc(dayEntries[0].id).update({
+            endTime: firebase.firestore.Timestamp.fromDate(newEnd)
+          });
+        }
+
+        closeModal();
+        loadTimesheet(employeeSelect.value);
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
       }
     }
 
