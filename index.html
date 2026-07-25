@@ -103,7 +103,7 @@
     <div id="debug"></div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script>
     const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
@@ -111,53 +111,66 @@
     const showWarning = (msg) => { const el = document.getElementById('warningMsg'); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); };
     
     const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
-    firebase.initializeApp(firebaseConfig); const db = firebase.firestore(); db.settings({ ignoreUndefinedProperties: true });
+    firebase.initializeApp(firebaseConfig); 
+    const db = firebase.firestore(); 
+    db.settings({ ignoreUndefinedProperties: true });
+    
+    // === UI ELEMENTS ===
+    const sel = document.getElementById('employee');
+    const btn = document.getElementById('stampBtn');
+    const status = document.getElementById('status');
+    const errorMsg = document.getElementById('errorMsg');
+    const warningMsg = document.getElementById('warningMsg');
+    const list = document.getElementById('entryList');
+    const rangeFilter = document.getElementById('rangeFilter');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportArrow = document.getElementById('exportArrow');
+    const exportDropdown = document.getElementById('exportDropdown');
+    const exportOptions = document.querySelectorAll('.export-option');
+    
+    let user = localStorage.getItem('tz_user') || '';
+    let allEntries = [];
+    let selectedFormat = 'pdf';
+    const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
     
     // === STAFF / PASSWORD ===
     let staffDB = {};
+    
     function populateEmployeeDropdown() {
       const employeeNames = Object.keys(staffDB);
       sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
                       employeeNames.map(n => `<option value="${n}">${n}</option>`).join('');
       sel.disabled = false;
       
-      // Vorherige Auswahl wiederherstellen, falls gültig
       if (user && employeeNames.includes(user)) { 
         sel.value = user; 
         loadUserState(); 
       }
     }
+
     async function loadStaff() {
       try {
         const res = await fetch('staff.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         staffDB = await res.json();
         console.log('✅ Staff geladen:', Object.keys(staffDB).length);
-        populateEmployeeDropdown(); // Dropdown erst nach erfolgreichem Laden befüllen
+        populateEmployeeDropdown();
       } catch (e) { 
         console.error('❌ staff.json Fehler:', e); 
         showError('Mitarbeiter-Daten nicht ladbar.'); 
       }
     }
+    
     function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
     loadStaff();
     
-    // === UI ELEMENTS ===
-    const sel = document.getElementById('employee'), btn = document.getElementById('stampBtn'), status = document.getElementById('status'), errorMsg = document.getElementById('errorMsg'), warningMsg = document.getElementById('warningMsg'), list = document.getElementById('entryList'), rangeFilter = document.getElementById('rangeFilter'), exportBtn = document.getElementById('exportBtn'), exportArrow = document.getElementById('exportArrow'), exportDropdown = document.getElementById('exportDropdown'), exportOptions = document.querySelectorAll('.export-option');
-    let user = localStorage.getItem('tz_user') || '', allEntries = [], selectedFormat = 'pdf';
-    const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
-    
-    // === INIT ===
-    sel.innerHTML += employees.map(n => `<option value="${n}">${n}</option>`).join(''); sel.disabled = false;
-    if(user && employees.includes(user)) { sel.value = user; loadUserState(); }
-    
-        sel.addEventListener('change', () => {
+    // === EVENT LISTENERS ===
+    sel.addEventListener('change', () => {
       user = sel.value; 
       localStorage.setItem('tz_user', user);
       const pwInput = document.getElementById('password'); 
       if (pwInput) pwInput.value = '';
       
-      // Prüfe dynamisch gegen die geladenen Keys
       if (user && Object.keys(staffDB).includes(user)) {
         loadUserState(); 
       } else { 
@@ -166,6 +179,7 @@
         list.innerHTML = '<div class="loading">Warte...</div>'; 
       }
     });
+    
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
     
     // === EXPORT DROPDOWN ===
@@ -174,22 +188,33 @@
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
     document.addEventListener('click', (e) => { if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); } });
 
-    // === LAUFENDER MONAT BUTTON (NUR PDF) ===
     document.getElementById('currentMonthBtn').addEventListener('click', () => exportCurrentMonthData('pdf'));
     
     // === HELPERS ===
     function toDateSafe(val) {
-      if (!val) return null; if (val.toDate) return val.toDate();
-      if (val instanceof Date) return val; const d = new Date(val); return isNaN(d.getTime()) ? null : d; }
+      if (!val) return null; 
+      if (val.toDate) return val.toDate();
+      if (val instanceof Date) return val; 
+      const d = new Date(val); 
+      return isNaN(d.getTime()) ? null : d; 
+    }
     function fmtTime(d) { 
-      const date = toDateSafe(d); return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; }
+      const date = toDateSafe(d); 
+      return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; 
+    }
     function fmtDate(d) { 
-      const date = toDateSafe(d); return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; }
+      const date = toDateSafe(d); 
+      return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; 
+    }
     function fmtKey(d) {
-      const date = toDateSafe(d); return date ? date.toISOString().slice(0,10) : ''; }
+      const date = toDateSafe(d); 
+      return date ? date.toISOString().slice(0,10) : ''; 
+    }
     function msToMin(ms) { return Math.floor(ms/60000); }
     function fmtDur(mins) {
-      const h=Math.floor(mins/60), m=mins%60; return h>0?`${h}h ${m}m`:`${m}min`; }
+      const h=Math.floor(mins/60), m=mins%60; 
+      return h>0?`${h}h ${m}m`:`${m}min`; 
+    }
     function inRange(date, days) { 
       if(!date) return false; 
       const d = toDateSafe(date);
@@ -201,7 +226,8 @@
     }
     function isSameDay(d1, d2) {
       const a = toDateSafe(d1), b = toDateSafe(d2);
-      return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+      return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); 
+    }
     
     // === PAUSEN-BERECHNUNG (EXPORT) ===
     function getRequiredBreak(workMinutes) { if (workMinutes >= 540) return 45; if (workMinutes >= 360) return 30; return 0; }
@@ -253,7 +279,7 @@
       btn.disabled = false;
     }
     
-    // === RENDER LIST (ROHZEITEN ANZEIGEN) ===
+    // === RENDER LIST ===
     function renderList(entries) {
       if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
       const days = parseInt(rangeFilter.value); const byDay = {};
@@ -286,7 +312,7 @@
       document.querySelectorAll('.corr-btn').forEach(b => { b.onclick = (ev) => { correctTimestamp(ev.target.dataset.id, ev.target.dataset.f, ev.target.dataset.v); }; });
     }
     
-    // === MANUELLE KORREKTUR (mit Passwort-Check) ===
+    // === MANUELLE KORREKTUR ===
     async function correctTimestamp(id, field, isoVal) {
       const pw = document.getElementById('password')?.value || '';
       if(!checkPassword(user, pw)) { alert('❌ Falsches Passwort – keine Änderung möglich.'); return; }
@@ -301,7 +327,7 @@
       catch(e) { showError('Fehler: '+e.message); }
     }
     
-    // === STAMP BUTTON (ROHZEITEN SPEICHERN) ===
+    // === STAMP BUTTON ===
     btn.addEventListener('click', async () => {
       if(!user) return;
       const pw = document.getElementById('password')?.value || '';
@@ -369,7 +395,7 @@
       exportBtn.disabled = false; exportBtn.querySelector('span').textContent = 'Letzter Monat';
     }
 
-    // === EXPORT (LAUFENDER MONAT, NUR PDF) ===
+    // === EXPORT (LAUFENDER MONAT) ===
     async function exportCurrentMonthData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
       const currentBtn = document.getElementById('currentMonthBtn');
