@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <title>Stundenzettel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 15px; max-width: 600px; width: 100%; margin: 10px 0; }
+        h1 { text-align: center; font-size: 1.4rem; color: #333; margin-bottom: 15px; }
+        
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        select { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem; background: #f9f9f9; }
+        .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; }
+        
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 450px; }
+        th { background: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; }
+        td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; }
+        tr:last-child td { border-bottom: none; }
+        .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
+        .empty-day { color: #94a3b8; font-style: italic; text-align: center; padding: 20px; }
+        
+        .loading { text-align: center; padding: 20px; color: #64748b; }
+        .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>📅 Stundenzettel (Laufender Monat)</h1>
+    
+    <div class="controls">
+      <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
+      <a href="order.html" class="back-btn">← Zurück</a>
+    </div>
+
+    <div id="errorMsg" class="error"></div>
+    <div id="tableContainer" class="table-wrapper">
+      <div class="loading">Bitte Mitarbeiter auswählen...</div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let staffDB = {};
+    const employeeSelect = document.getElementById('employeeSelect');
+    const tableContainer = document.getElementById('tableContainer');
+    const errorMsg = document.getElementById('errorMsg');
+
+    // 1. Staff laden
+    async function loadStaff() {
+      try {
+        const res = await fetch('staff.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        staffDB = await res.json();
+        const names = Object.keys(staffDB);
+        employeeSelect.innerHTML = '<option value="">-- Bitte wählen --</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+        
+        const savedUser = localStorage.getItem('tz_user');
+        if (savedUser && names.includes(savedUser)) {
+          employeeSelect.value = savedUser;
+          loadTimesheet(savedUser);
+        }
+      } catch (e) {
+        showError('Mitarbeiter-Daten nicht ladbar.');
+      }
+    }
+
+    // 2. Helper Funktionen
+    function toDateSafe(val) {
+      if (!val) return null;
+      if (val.toDate) return val.toDate();
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function fmtDateShort(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+    }
+
+    function fmtTime(val) {
+      const d = toDateSafe(val);
+      return d ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '-';
+    }
+
+    function fmtDur(mins) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}min`;
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      tableContainer.innerHTML = '';
+    }
+
+    // 3. Hauptlogik: Zeiten laden und gruppieren
+    async function loadTimesheet(user) {
+      if (!user) {
+        tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
+        return;
+      }
+      localStorage.setItem('tz_user', user);
+      tableContainer.innerHTML = '<div class="loading">Lade Daten...</div>';
+      errorMsg.style.display = 'none';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+
+        if (snap.empty) {
+          tableContainer.innerHTML = '<div class="empty-day">Keine Einträge in diesem Monat.</div>';
+          return;
+        }
+
+        // Gruppieren nach Tag (YYYY-MM-DD)
+        const byDay = {};
+        snap.forEach(doc => {
+          const data = doc.data();
+          const start = toDateSafe(data.startTime);
+          if (!start) return;
+          const dateKey = start.toISOString().slice(0, 10);
+          
+          if (!byDay[dateKey]) byDay[dateKey] = [];
+          byDay[dateKey].push({
+            startTime: data.startTime,
+            endTime: data.endTime,
+            startMs: start.getTime(),
+            endMs: data.endTime ? toDateSafe(data.endTime).getTime() : start.getTime()
+          });
+        });
+
+        // Tabelle aufbauen
+        let html = `<table><thead><tr>
+          <th style="width:15%">Tag</th>
+          <th style="width:17%">In</th>
+          <th style="width:17%">Pause In</th>
+          <th style="width:17%">Pause Out</th>
+          <th style="width:17%">Out</th>
+          <th style="width:17%; text-align:right;">Stunden</th>
+        </tr></thead><tbody>`;
+
+        const sortedDays = Object.keys(byDay).sort();
+
+        for (const dateKey of sortedDays) {
+          const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
+          
+          // Gesamtzeit des Tages berechnen
+          const totalMin = entries.reduce((sum, e) => {
+            return sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0);
+          }, 0);
+
+          entries.forEach((entry, index) => {
+            const isLast = index === entries.length - 1;
+            const nextEntry = entries[index + 1];
+
+            const tag = index === 0 ? fmtDateShort(dateKey) : '';
+            const inTime = fmtTime(entry.startTime);
+            const pauseIn = fmtTime(entry.endTime);
+            const pauseOut = nextEntry ? fmtTime(nextEntry.startTime) : '';
+            const outTime = isLast ? fmtTime(entry.endTime) : '';
+            const hours = isLast ? fmtDur(Math.floor(totalMin)) : '';
+
+            html += `<tr>
+              <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+              <td>${inTime}</td>
+              <td>${pauseIn}</td>
+              <td>${pauseOut}</td>
+              <td>${outTime}</td>
+              <td class="total-cell">${hours}</td>
+            </tr>`;
+          });
+        }
+
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+
+      } catch (e) {
+        console.error(e);
+        showError('Fehler beim Laden: ' + e.message);
+      }
+    }
+
+    employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
+    loadStaff();
+  </script>
+</body>
+</html>
