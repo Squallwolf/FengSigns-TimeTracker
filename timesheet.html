@@ -246,11 +246,48 @@
         let html = `<table><thead>${headerHtml}</thead><tbody>`;
         const sortedDays = Object.keys(byDay).sort();
 
-        for (const dateKey of sortedDays) {
+                for (const dateKey of sortedDays) {
           const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
           const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
 
-          if (entries.length <= 2) {
+          if (hasComplexDays) {
+            // === KOMPAKTE ANSICHT FÜR ALLE TAGE, wenn komplexe Tage existieren ===
+            // 1-2 Blöcke werden in Von/Bis/Dauer-Struktur dargestellt
+            if (entries.length <= 2) {
+              const d1 = entries[0];
+              const d2 = entries[1] || null;
+              
+              const inTime = fmtTime(d1.startTime);
+              const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+              
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>${inTime}</td>
+                <td>${outTime}</td>
+                <td class="duration-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td style="text-align: center;"><button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button></td>
+              </tr>`;
+            } else {
+              // 3+ Blöcke: Mehrere Zeilen
+              entries.forEach((entry, index) => {
+                const isLast = index === entries.length - 1;
+                const tag = index === 0 ? fmtDateShort(dateKey) : '';
+                const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
+                const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
+                
+                html += `<tr>
+                  <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+                  <td>${fmtTime(entry.startTime)}</td>
+                  <td>${fmtTime(entry.endTime)}</td>
+                  <td class="duration-cell">${fmtDur(blockMin)}</td>
+                  <td class="total-cell">${totalDur}</td>
+                  <td style="text-align: center;"><button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button></td>
+                </tr>`;
+              });
+            }
+          } else {
+            // === STANDARDANSICHT (nur 1-2 Blöcke pro Tag) ===
             const d1 = entries[0];
             const d2 = entries[1] || null;
             
@@ -268,22 +305,8 @@
               <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
               <td style="text-align: center;"><button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button></td>
             </tr>`;
-          } else {
-            entries.forEach((entry, index) => {
-              const isLast = index === entries.length - 1;
-              const tag = index === 0 ? fmtDateShort(dateKey) : '';
-              const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
-              const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
-              
-              html += `<tr>
-                <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
-                <td>${fmtTime(entry.startTime)}</td>
-                <td>${fmtTime(entry.endTime)}</td>
-                <td class="duration-cell">${fmtDur(blockMin)}</td>
-                <td class="total-cell">${totalDur}</td>
-                <td style="text-align: center;"><button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button></td>
-              </tr>`;
-            });
+          }
+        }
           }
         }
 
