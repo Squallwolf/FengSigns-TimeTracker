@@ -8,7 +8,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
-        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 15px; max-width: 600px; width: 100%; margin: 10px 0; }
+        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 15px; max-width: 650px; width: 100%; margin: 10px 0; }
         h1 { text-align: center; font-size: 1.4rem; color: #333; margin-bottom: 15px; }
         
         .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
@@ -16,8 +16,8 @@
         .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; }
         
         .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 500px; }
-        th { background: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 550px; }
+        th { background: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; white-space: nowrap; }
         td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; }
         tr:last-child td { border-bottom: none; }
         .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
@@ -32,7 +32,7 @@
         
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
         .modal.active { display: flex; }
-        .modal-content { background: white; border-radius: 12px; padding: 20px; max-width: 350px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-content { background: white; border-radius: 12px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
         .modal-field { margin-bottom: 12px; }
         .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
@@ -60,18 +60,43 @@
     </div>
   </div>
 
-  <!-- Vereinfachtes Modal: Nur In und Out pro Eintrag -->
+  <!-- Dynamisches Modal -->
   <div id="editModal" class="modal">
     <div class="modal-content">
-      <div class="modal-header">Eintrag bearbeiten</div>
-      <div class="modal-field">
-        <label>Kommen (In)</label>
-        <input type="time" id="editIn">
+      <div class="modal-header" id="modalTitle">Zeiten bearbeiten</div>
+      
+      <!-- Felder für 1 oder 2 Blöcke (Tagesbearbeitung) - immer 4 Felder -->
+      <div id="dayEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Kommen (In)</label>
+          <input type="time" id="editIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Start</label>
+          <input type="time" id="editPauseIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Ende</label>
+          <input type="time" id="editPauseOut">
+        </div>
+        <div class="modal-field">
+          <label>Gehen (Out)</label>
+          <input type="time" id="editOut">
+        </div>
       </div>
-      <div class="modal-field">
-        <label>Gehen (Out)</label>
-        <input type="time" id="editOut">
+
+      <!-- Felder für 3+ Blöcke (Einzelzeilen-Bearbeitung) -->
+      <div id="rowEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Beginn (dieser Block)</label>
+          <input type="time" id="editRowIn">
+        </div>
+        <div class="modal-field">
+          <label>Ende (dieser Block)</label>
+          <input type="time" id="editRowOut">
+        </div>
       </div>
+
       <div class="modal-buttons">
         <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
         <button class="modal-btn save" onclick="saveEdits()">Speichern</button>
@@ -86,6 +111,7 @@
 
     let staffDB = {};
     let currentEntries = [];
+    let currentUser = null;
     const employeeSelect = document.getElementById('employeeSelect');
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
@@ -142,6 +168,7 @@
         tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
         return;
       }
+      currentUser = user;
       localStorage.setItem('tz_user', user);
       tableContainer.innerHTML = '<div class="loading">Lade Daten...</div>';
       errorMsg.style.display = 'none';
@@ -165,6 +192,8 @@
 
         currentEntries = [];
         const byDay = {};
+        let hasComplexDays = false;
+
         snap.forEach(doc => {
           const data = doc.data();
           const start = toDateSafe(data.startTime);
@@ -173,6 +202,7 @@
           
           const entry = {
             id: doc.id,
+            employee: data.employee,
             startTime: data.startTime,
             endTime: data.endTime,
             startMs: start.getTime(),
@@ -184,51 +214,77 @@
           byDay[dateKey].push(entry);
         });
 
-        let html = `<table><thead><tr>
-          <th style="width:15%">Tag</th>
-          <th style="width:15%">In</th>
-          <th style="width:15%">Out</th>
-          <th style="width:15%; text-align:right;">Dauer</th>
-          <th style="width:15%; text-align:right;">Gesamt</th>
-          <th style="width:25%; text-align:center;">Aktion</th>
-        </tr></thead><tbody>`;
+        for (const key in byDay) {
+          if (byDay[key].length >= 3) {
+            hasComplexDays = true;
+            break;
+          }
+        }
 
+        let headerHtml = '';
+        if (hasComplexDays) {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:15%">Von</th>
+            <th style="width:15%">Bis</th>
+            <th style="width:15%">Dauer</th>
+            <th style="width:15%; text-align:right;">Gesamt</th>
+            <th style="width:28%; text-align:center;">Aktion</th>
+          </tr>`;
+        } else {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:15%">In</th>
+            <th style="width:15%">Pause In</th>
+            <th style="width:15%">Pause Out</th>
+            <th style="width:15%">Out</th>
+            <th style="width:15%; text-align:right;">Stunden</th>
+            <th style="width:13%; text-align:center;">Aktion</th>
+          </tr>`;
+        }
+
+        let html = `<table><thead>${headerHtml}</thead><tbody>`;
         const sortedDays = Object.keys(byDay).sort();
 
         for (const dateKey of sortedDays) {
           const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
-          
-          // Gesamtzeit des Tages berechnen
-          const totalMin = entries.reduce((sum, e) => {
-            return sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0);
-          }, 0);
+          const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
 
-          // JEDER Eintrag bekommt seine eigene Zeile
-          entries.forEach((entry, index) => {
-            const isLast = index === entries.length - 1;
-            const tag = index === 0 ? fmtDateShort(dateKey) : '';
-            const inTime = fmtTime(entry.startTime);
-            const outTime = fmtTime(entry.endTime);
+          if (entries.length <= 2) {
+            const d1 = entries[0];
+            const d2 = entries[1] || null;
             
-            // Dauer dieses spezifischen Blocks
-            const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
-            const blockDur = fmtDur(blockMin);
+            const inTime = fmtTime(d1.startTime);
+            const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
+            const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
+            const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
             
-            // Tagesgesamt nur in der letzten Zeile
-            const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
-            
-            // Edit-Button für JEDEN Eintrag
-            const editBtn = `<button class="edit-btn" onclick="openEditModal('${entry.id}')">✏️</button>`;
-
             html += `<tr>
-              <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+              <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
               <td>${inTime}</td>
+              <td>${pauseIn}</td>
+              <td>${pauseOut}</td>
               <td>${outTime}</td>
-              <td class="duration-cell">${blockDur}</td>
-              <td class="total-cell">${totalDur}</td>
-              <td style="text-align: center;">${editBtn}</td>
+              <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+              <td style="text-align: center;"><button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button></td>
             </tr>`;
-          });
+          } else {
+            entries.forEach((entry, index) => {
+              const isLast = index === entries.length - 1;
+              const tag = index === 0 ? fmtDateShort(dateKey) : '';
+              const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
+              const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
+              
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+                <td>${fmtTime(entry.startTime)}</td>
+                <td>${fmtTime(entry.endTime)}</td>
+                <td class="duration-cell">${fmtDur(blockMin)}</td>
+                <td class="total-cell">${totalDur}</td>
+                <td style="text-align: center;"><button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button></td>
+              </tr>`;
+            });
+          }
         }
 
         html += '</tbody></table>';
@@ -240,58 +296,137 @@
       }
     }
 
-    let editingEntryId = null;
+    let editMode = '';
+    let currentEditDateKey = null;
+    let currentEditEntryId = null;
 
-    function openEditModal(entryId) {
-      editingEntryId = entryId;
+    function openEditDay(dateKey) {
+      currentEditDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
+      
+      document.getElementById('dayEditFields').style.display = 'block';
+      document.getElementById('rowEditFields').style.display = 'none';
+
+      if (dayEntries.length === 1) {
+        editMode = 'day-1';
+        document.getElementById('modalTitle').textContent = 'Eintrag bearbeiten (Pause nachtragen möglich)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = fmtTime(dayEntries[0].endTime);
+      } else {
+        editMode = 'day-2';
+        document.getElementById('modalTitle').textContent = 'Tageszeiten bearbeiten (2 Blöcke)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = fmtTime(dayEntries[0].endTime);
+        document.getElementById('editPauseOut').value = fmtTime(dayEntries[1].startTime);
+        document.getElementById('editOut').value = fmtTime(dayEntries[1].endTime);
+      }
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openEditRow(entryId) {
+      editMode = 'row';
+      currentEditEntryId = entryId;
       const entry = currentEntries.find(e => e.id === entryId);
       if (!entry) return;
 
-      // Werte in das 2-Felder-Modal laden
-      document.getElementById('editIn').value = toDateSafe(entry.startTime).toTimeString().slice(0, 5);
-      document.getElementById('editOut').value = entry.endTime ? toDateSafe(entry.endTime).toTimeString().slice(0, 5) : '';
-
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'block';
+      document.getElementById('modalTitle').textContent = 'Diesen Zeitblock bearbeiten';
+      
+      document.getElementById('editRowIn').value = fmtTime(entry.startTime);
+      document.getElementById('editRowOut').value = entry.endTime ? fmtTime(entry.endTime) : '';
+      
       document.getElementById('editModal').classList.add('active');
     }
 
     function closeModal() {
       document.getElementById('editModal').classList.remove('active');
-      editingEntryId = null;
+      editMode = '';
+      currentEditDateKey = null;
+      currentEditEntryId = null;
     }
 
     async function saveEdits() {
-      if (!editingEntryId) return;
-      const entry = currentEntries.find(e => e.id === editingEntryId);
-      if (!entry) return;
-
-      const inTime = document.getElementById('editIn').value;
-      const outTime = document.getElementById('editOut').value;
-
       try {
-        const baseDate = toDateSafe(entry.startTime);
-        const updateData = {};
-
-        // Startzeit aktualisieren
-        const newStart = new Date(baseDate);
-        const [h1, m1] = inTime.split(':');
-        newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
-        updateData.startTime = firebase.firestore.Timestamp.fromDate(newStart);
-
-        // Endzeit aktualisieren (falls vorhanden)
-        if (outTime) {
-          const newEnd = new Date(baseDate);
-          const [h2, m2] = outTime.split(':');
-          newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
-          updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+        if (editMode === 'day-1') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          // Wenn Pausenzeiten eingetragen wurden, zweiten Block erstellen
+          if (pauseInTime && pauseOutTime) {
+            // Ersten Block aktualisieren: In -> Pause In
+            await updateEntry(dayEntries[0].id, inTime, pauseInTime);
+            
+            // Zweiten Block erstellen: Pause Out -> Out
+            const baseDate = toDateSafe(dayEntries[0].startTime);
+            const newStart = new Date(baseDate);
+            const [h1, m1] = pauseOutTime.split(':');
+            newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            
+            const newEnd = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+            
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(newStart),
+              endTime: firebase.firestore.Timestamp.fromDate(newEnd),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            // Keine Pause, nur In und Out aktualisieren
+            await updateEntry(dayEntries[0].id, inTime, outTime);
+          }
+        } 
+        else if (editMode === 'day-2') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey).sort((a, b) => a.startMs - b.startMs);
+          const inTime = document.getElementById('editIn').value;
+          const pInTime = document.getElementById('editPauseIn').value;
+          const pOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          await updateEntry(dayEntries[0].id, inTime, pInTime);
+          await updateEntry(dayEntries[1].id, pOutTime, outTime);
+        } 
+        else if (editMode === 'row') {
+          const inTime = document.getElementById('editRowIn').value;
+          const outTime = document.getElementById('editRowOut').value;
+          await updateEntry(currentEditEntryId, inTime, outTime);
         }
-
-        await db.collection('entries').doc(editingEntryId).update(updateData);
+        
         closeModal();
-        loadTimesheet(employeeSelect.value); // Tabelle neu laden
+        loadTimesheet(employeeSelect.value);
       } catch (e) {
         console.error(e);
         alert('Fehler beim Speichern: ' + e.message);
       }
+    }
+
+    async function updateEntry(id, inStr, outStr) {
+      const entry = currentEntries.find(e => e.id === id);
+      if (!entry) return;
+      
+      const baseDate = toDateSafe(entry.startTime);
+      const updateData = {};
+
+      const newStart = new Date(baseDate);
+      const [h1, m1] = inStr.split(':');
+      newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+      updateData.startTime = firebase.firestore.Timestamp.fromDate(newStart);
+
+      if (outStr) {
+        const newEnd = new Date(baseDate);
+        const [h2, m2] = outStr.split(':');
+        newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+        updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+      }
+
+      await db.collection('entries').doc(id).update(updateData);
     }
 
     employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
