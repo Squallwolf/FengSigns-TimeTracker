@@ -60,7 +60,6 @@
     </div>
   </div>
 
-  <!-- Dynamisches Modal mit Passwortabfrage -->
   <div id="editModal" class="modal">
     <div class="modal-content">
       <div class="modal-header" id="modalTitle">Zeiten bearbeiten</div>
@@ -95,7 +94,6 @@
         </div>
       </div>
 
-      <!-- NEU: Passwortfeld -->
       <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
         <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
         <input type="password" id="editPassword" placeholder="••••••" style="border-color: #fca5a5;">
@@ -119,6 +117,20 @@
     const employeeSelect = document.getElementById('employeeSelect');
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
+
+    function isEditable(dateKey) {
+      const parts = dateKey.split('-');
+      const entryDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      entryDate.setHours(0, 0, 0, 0);
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const diffTime = today - entryDate;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      return diffDays >= 0 && diffDays <= 2;
+    }
 
     async function loadStaff() {
       try {
@@ -253,6 +265,7 @@
         for (const dateKey of sortedDays) {
           const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
           const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
+          const canEdit = isEditable(dateKey);
 
           if (hasComplexDays) {
             if (entries.length <= 2) {
@@ -261,6 +274,7 @@
               
               const inTime = fmtTime(d1.startTime);
               const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+              const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
               
               html += `<tr>
                 <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
@@ -268,7 +282,7 @@
                 <td>${outTime}</td>
                 <td class="duration-cell">${fmtDur(Math.floor(totalMin))}</td>
                 <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
-                <td style="text-align: center;"><button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button></td>
+                <td style="text-align: center;">${editBtn}</td>
               </tr>`;
             } else {
               entries.forEach((entry, index) => {
@@ -276,6 +290,7 @@
                 const tag = index === 0 ? fmtDateShort(dateKey) : '';
                 const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
                 const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
+                const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button>` : '';
                 
                 html += `<tr>
                   <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
@@ -283,7 +298,7 @@
                   <td>${fmtTime(entry.endTime)}</td>
                   <td class="duration-cell">${fmtDur(blockMin)}</td>
                   <td class="total-cell">${totalDur}</td>
-                  <td style="text-align: center;"><button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button></td>
+                  <td style="text-align: center;">${editBtn}</td>
                 </tr>`;
               });
             }
@@ -295,6 +310,7 @@
             const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
             const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
             const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
             
             html += `<tr>
               <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
@@ -303,7 +319,7 @@
               <td>${pauseOut}</td>
               <td>${outTime}</td>
               <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
-              <td style="text-align: center;"><button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button></td>
+              <td style="text-align: center;">${editBtn}</td>
             </tr>`;
           }
         }
@@ -327,7 +343,7 @@
       
       document.getElementById('dayEditFields').style.display = 'block';
       document.getElementById('rowEditFields').style.display = 'none';
-      document.getElementById('editPassword').value = ''; // Passwort zurücksetzen
+      document.getElementById('editPassword').value = '';
 
       if (dayEntries.length === 1) {
         editMode = 'day-1';
@@ -355,7 +371,7 @@
 
       document.getElementById('dayEditFields').style.display = 'none';
       document.getElementById('rowEditFields').style.display = 'block';
-      document.getElementById('editPassword').value = ''; // Passwort zurücksetzen
+      document.getElementById('editPassword').value = '';
       document.getElementById('modalTitle').textContent = 'Diesen Zeitblock bearbeiten';
       
       document.getElementById('editRowIn').value = fmtTime(entry.startTime);
@@ -366,23 +382,21 @@
 
     function closeModal() {
       document.getElementById('editModal').classList.remove('active');
-      document.getElementById('editPassword').value = ''; // Passwort beim Schließen löschen
+      document.getElementById('editPassword').value = '';
       editMode = '';
       currentEditDateKey = null;
       currentEditEntryId = null;
     }
 
     async function saveEdits() {
-      // 1. PASSWORT-PRÜFUNG
       const enteredPw = document.getElementById('editPassword').value;
       if (!currentUser || !staffDB[currentUser] || staffDB[currentUser] !== enteredPw) {
         alert('❌ Falsches Passwort. Änderungen wurden nicht gespeichert.');
         document.getElementById('editPassword').value = '';
-        return; // Abbruch der Funktion
+        return;
       }
 
       try {
-        // 2. SPEICHER-LOGIK (nur erreichbar bei korrektem Passwort)
         if (editMode === 'day-1') {
           const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
           const inTime = document.getElementById('editIn').value;
