@@ -186,8 +186,6 @@
     exportBtn.addEventListener('click', (e) => { if (e.target !== exportArrow) exportData(selectedFormat); });
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
     document.addEventListener('click', (e) => { if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); } });
-
-    document.getElementById('currentMonthBtn').addEventListener('click', () => exportCurrentMonthData('pdf'));
     
     // === HELPERS ===
     function toDateSafe(val) {
