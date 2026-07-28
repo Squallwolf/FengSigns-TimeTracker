@@ -230,6 +230,18 @@
           byDay[dateKey].push(entry);
         });
 
+        // Letzte 3 Tage immer hinzufügen (aber nur, wenn sie im aktuellen Monat liegen)
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(now);
+          d.setDate(now.getDate() - i);
+          if (d >= monthStart) {
+            const dateKey = d.toISOString().slice(0, 10);
+            if (!byDay[dateKey]) {
+              byDay[dateKey] = [];
+            }
+          }
+        }
+
         for (const key in byDay) {
           if (byDay[key].length >= 3) {
             hasComplexDays = true;
@@ -267,7 +279,26 @@
           const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
           const canEdit = isEditable(dateKey);
 
-          if (hasComplexDays) {
+          if (entries.length === 0) {
+            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">➕</button>` : '';
+            if (hasComplexDays) {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td colspan="4" class="empty-day" style="padding: 6px; text-align: center;">Keine Einträge</td>
+                <td style="text-align: center;">${editBtn}</td>
+              </tr>`;
+            } else {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td class="total-cell">0min</td>
+                <td style="text-align: center;">${editBtn}</td>
+              </tr>`;
+            }
+          } else if (hasComplexDays) {
             if (entries.length <= 2) {
               const d1 = entries[0];
               const d2 = entries[1] || null;
@@ -345,7 +376,14 @@
       document.getElementById('rowEditFields').style.display = 'none';
       document.getElementById('editPassword').value = '';
 
-      if (dayEntries.length === 1) {
+      if (dayEntries.length === 0) {
+        editMode = 'day-new';
+        document.getElementById('modalTitle').textContent = 'Neuen Eintrag hinzufügen';
+        document.getElementById('editIn').value = '08:00';
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = '17:00';
+      } else if (dayEntries.length === 1) {
         editMode = 'day-1';
         document.getElementById('modalTitle').textContent = 'Eintrag bearbeiten (Pause nachtragen möglich)';
         document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
@@ -397,7 +435,68 @@
       }
 
       try {
-        if (editMode === 'day-1') {
+        if (editMode === 'day-new') {
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (!inTime || !outTime) {
+            alert('Bitte mindestens Komm- und Gehzeit angeben.');
+            return;
+          }
+
+          const parts = currentEditDateKey.split('-');
+          const baseDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          
+          if (pauseInTime && pauseOutTime) {
+            const start1 = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start1.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            
+            const end1 = new Date(baseDate);
+            const [h2, m2] = pauseInTime.split(':');
+            end1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start1),
+              endTime: firebase.firestore.Timestamp.fromDate(end1),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const start2 = new Date(baseDate);
+            const [h3, m3] = pauseOutTime.split(':');
+            start2.setHours(parseInt(h3), parseInt(m3), 0, 0);
+            
+            const end2 = new Date(baseDate);
+            const [h4, m4] = outTime.split(':');
+            end2.setHours(parseInt(h4), parseInt(m4), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start2),
+              endTime: firebase.firestore.Timestamp.fromDate(end2),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            const start = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            
+            const end = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            end.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start),
+              endTime: firebase.firestore.Timestamp.fromDate(end),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } 
+        else if (editMode === 'day-1') {
           const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
           const inTime = document.getElementById('editIn').value;
           const pauseInTime = document.getElementById('editPauseIn').value;
