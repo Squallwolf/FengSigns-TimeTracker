@@ -82,6 +82,7 @@
     </div>
     <button id="toggleUsedBtn" style="padding: 8px 12px; font-size: 18px; margin-top: 20px; border-radius: 20%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none;">🚫</button>
   <a id="toTimeTrackerBtn" href="index.html" title="Zurück zur Zeiterfassung" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:18px;margin-top:20px;border-radius:20%;background:white;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;border:none;text-decoration:none;color:#333;width:44px;height:44px;">⏱️</a>
+  <button id="cleanupBtn" style="padding: 8px 12px; font-size: 18px; margin-top: 20px; margin-left: 10px; border-radius: 20%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none;" title="Erledigte Bestellungen löschen">🗑️</button>
   <div id="usedItemsList" class="orders-list" style="display: none; margin-top: 20px; max-height: 300px; overflow-y: auto;"><div class="no-orders">Lade fehlende Artikel...</div></div>
   </div>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
@@ -140,7 +141,33 @@
             } 
         }); 
     }
+const cleanupBtn = document.getElementById('cleanupBtn');
 
+cleanupBtn.addEventListener('click', async () => {
+    if (!confirm('Alle erledigten Bestellungen wirklich löschen?')) return;
+    
+    try {
+        const snapshot = await db.collection('orders')
+            .where('status', '==', 'erledigt')
+            .get();
+        
+        if (snapshot.empty) {
+            alert('Keine erledigten Bestellungen gefunden.');
+            return;
+        }
+        
+        const batch = db.batch();
+        snapshot.forEach(doc => {
+            batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+        alert(`${snapshot.size} erledigte Bestellungen gelöscht.`);
+    } catch (error) {
+        console.error('Fehler beim Löschen:', error);
+        alert('Fehler: ' + error.message);
+    }
+});
     setupAutocomplete(articleInput, articleAutocomplete, 'article');
     setupAutocomplete(productInput, productAutocomplete, 'product');
 
