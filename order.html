@@ -43,6 +43,7 @@
         button[type="submit"] { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; margin-top: 5px; }
         button[type="submit"]:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
         button[type="submit"]:active { transform: translateY(0); }
+        button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
         .success-message { display: none; background: #4caf50; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: 600; }
         @media (max-width: 600px) { .container { position: relative; padding: 25px; } h1 {font-size: 24px;} .row {grid-template-columns: 1fr;} }
         .orders-section { margin-top: 40px; padding-top: 30px; border-top: 2px solid #e0e0e0; }
@@ -145,9 +146,20 @@
 
     const form = document.getElementById('orderForm');
     const successMessage = document.getElementById('successMessage');
+    const submitBtn = form.querySelector('button[type="submit"]');
 
-        form.addEventListener('submit', async function(e) {
+    form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        
+        // --- Doppelklick-Schutz: Totzeit 1200 ms ---
+        submitBtn.disabled = true;
+        const originalBtnText = submitBtn.textContent;
+        submitBtn.textContent = 'Bitte warten...';
+        setTimeout(() => {
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalBtnText;
+        }, 1200);
+        // --------------------------------------------
         
         const articleNumber = document.getElementById('articleNumber').value.trim();
         const productName = document.getElementById('productName').value.trim();
@@ -155,24 +167,30 @@
         const unit = document.getElementById('unit').value;
         const errorMsg = document.getElementById('errorMessage');
 
-        // 1. Prüfen, ob der Artikel bereits als "fehlend" markiert ist
-        try {
-            const missingCheck = await db.collection('orders')
-                .where('articleNumber', '==', articleNumber)
-                .where('status', '==', 'fehlend')
-                .get();
+        // --- Prüfen, ob die Artikelnummer eine reine Zahl ist ---
+        const isNumericArticle = /^\d+$/.test(articleNumber);
 
-            if (!missingCheck.empty) {
-                errorMsg.textContent = `⚠️ "${productName}" (Art-Nr: ${articleNumber}) ist zur Zeit nicht verfügbar!`;
-                errorMsg.style.display = 'block';
-                setTimeout(() => { errorMsg.style.display = 'none'; }, 5000);
-                return; // Abbrechen, keinen neuen Eintrag erstellen
+        // 1. Prüfen, ob der Artikel bereits als "fehlend" markiert ist
+        //    Nur bei numerischen Artikelnummern - Strings wie "??" werden ignoriert
+        if (isNumericArticle) {
+            try {
+                const missingCheck = await db.collection('orders')
+                    .where('articleNumber', '==', articleNumber)
+                    .where('status', '==', 'fehlend')
+                    .get();
+
+                if (!missingCheck.empty) {
+                    errorMsg.textContent = `⚠️ "${productName}" (Art-Nr: ${articleNumber}) ist zur Zeit nicht verfügbar!`;
+                    errorMsg.style.display = 'block';
+                    setTimeout(() => { errorMsg.style.display = 'none'; }, 5000);
+                    return;
+                }
+            } catch (error) {
+                console.error('Fehler bei der Verfügbarkeitsprüfung:', error);
             }
-        } catch (error) {
-            console.error('Fehler bei der Verfügbarkeitsprüfung:', error);
         }
 
-        // 2. Normaler Bestellvorgang, wenn nicht fehlend
+        // 2. Normaler Bestellvorgang
         const formData = {
             articleNumber: articleNumber,
             productName: productName,
@@ -186,7 +204,7 @@
             const docRef = await db.collection('orders').add(formData);
             successMessage.textContent = '✓ Bestellung erfolgreich übermittelt! (ID: ' + docRef.id + ')';
             successMessage.style.display = 'block';
-            errorMsg.style.display = 'none'; // Sicherstellen, dass Fehlermeldung ausgeblendet ist
+            errorMsg.style.display = 'none';
             
             document.getElementById('articleNumber').value = '';
             document.getElementById('productName').value = '';
@@ -377,7 +395,5 @@
 
     loadOrders();
   </script>
-
-    
 </body>
 </html>
