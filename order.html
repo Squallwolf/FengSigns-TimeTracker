@@ -60,7 +60,7 @@
         .order-quantity { font-weight: bold; color: #555; white-space: nowrap; margin-right: 8px; }
         .order-status { font-size: 12px; padding: 4px 8px; border-radius: 6px; background: #FF9800; color: white; white-space: nowrap; }
         .order-status.vorbereitet { background: #2196F3; }
-        .order-details { font-size: 16px; color: #666; line-height: 1.6; }
+        .order-details { font-size: 14px; color: #666; line-height: 1.6; }
         .no-orders { text-align: center; padding: 30px; color: #999; }
     </style>
 </head>
@@ -80,11 +80,26 @@
       <div class="orders-header"><h2>Aktuelle Bestellungen</h2><div class="filter-buttons"><button class="filter-btn active" data-filter="all">Alle</button><button class="filter-btn" data-filter="offen">Offen</button><button class="filter-btn" data-filter="vorbereitet">Vorbereitet</button></div></div>
       <div id="ordersList" class="orders-list"><div class="no-orders">Lade Bestellungen...</div></div>
     </div>
-    <button id="toggleUsedBtn" style="padding: 8px 12px; font-size: 18px; margin-top: 20px; border-radius: 20%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none;">🚫</button>
-  <a id="toTimeTrackerBtn" href="index.html" title="Zurück zur Zeiterfassung" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:18px;margin-top:20px;border-radius:20%;background:white;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;border:none;text-decoration:none;color:#333;width:44px;height:44px;">⏱️</a>
-  <button id="cleanupBtn" style="padding: 8px 12px; font-size: 18px; margin-top: 20px; margin-left: 10px; border-radius: 20%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none;" title="Erledigte Bestellungen löschen">🗑️</button>
-  <div id="usedItemsList" class="orders-list" style="display: none; margin-top: 20px; max-height: 300px; overflow-y: auto;"><div class="no-orders">Lade fehlende Artikel...</div></div>
+    
+    <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-start;">
+        <button id="toggleUsedBtn" style="padding: 8px 12px; font-size: 18px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" title="Fehlende Artikel anzeigen">🚫</button>
+        <a id="toTimeTrackerBtn" href="index.html" title="Zurück zur Zeiterfassung" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:18px;border-radius:50%;background:white;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;border:none;text-decoration:none;color:#333;width:44px;height:44px;">⏱️</a>
+        <button id="cleanupBtn" style="padding: 8px 12px; font-size: 18px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" title="Erledigte Bestellungen löschen">🗑️</button>
+    </div>
+
+    <!-- Filterzeile für fehlende Artikel (initial ausgeblendet) -->
+    <div id="usedItemsFilterContainer" style="display: none; margin-top: 15px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
+        <label for="supplierFilter" style="font-size: 13px; font-weight: 600; color: #444; margin-right: 8px;">Nach Lieferant filtern:</label>
+        <select id="supplierFilter" style="width: auto; min-width: 200px; padding: 6px 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+            <option value="all">Alle Lieferanten</option>
+        </select>
+    </div>
+
+    <div id="usedItemsList" class="orders-list" style="display: none; margin-top: 10px; max-height: 300px; overflow-y: auto;">
+        <div class="no-orders">Lade fehlende Artikel...</div>
+    </div>
   </div>
+
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script>
@@ -109,6 +124,12 @@
         loadProducts().then(() => { document.getElementById('articleNumber')?.focus(); }); 
     });
 
+    // Hilfsfunktion: Lieferant anhand der Artikelnummer aus productsDB ermitteln
+    function getSupplierByArticleNumber(articleNumber) {
+        const product = productsDB.find(p => String(p.articleNumber).trim() === String(articleNumber).trim());
+        return product && product.supplier ? product.supplier.trim() : 'Unbekannt';
+    }
+
     const articleInput = document.getElementById('articleNumber');
     const productInput = document.getElementById('productName');
     const articleAutocomplete = document.getElementById('articleAutocomplete');
@@ -120,7 +141,7 @@
             autocompleteElement.innerHTML = ''; 
             if (value.length === 0) { autocompleteElement.classList.remove('active'); return; } 
             const filtered = productsDB.filter(product => { 
-                return searchBy === 'article' ? product.articleNumber.toLowerCase().includes(value) : product.productName.toLowerCase().includes(value); 
+                return searchBy === 'article' ? String(product.articleNumber).toLowerCase().includes(value) : product.productName.toLowerCase().includes(value); 
             }); 
             if (filtered.length > 0) { 
                 filtered.forEach(product => { 
@@ -141,33 +162,26 @@
             } 
         }); 
     }
-const cleanupBtn = document.getElementById('cleanupBtn');
 
-cleanupBtn.addEventListener('click', async () => {
-    if (!confirm('Alle erledigten Bestellungen wirklich löschen?')) return;
-    
-    try {
-        const snapshot = await db.collection('orders')
-            .where('status', '==', 'erledigt')
-            .get();
-        
-        if (snapshot.empty) {
-            alert('Keine erledigten Bestellungen gefunden.');
-            return;
+    const cleanupBtn = document.getElementById('cleanupBtn');
+    cleanupBtn.addEventListener('click', async () => {
+        if (!confirm('Alle erledigten Bestellungen wirklich löschen?')) return;
+        try {
+            const snapshot = await db.collection('orders').where('status', '==', 'erledigt').get();
+            if (snapshot.empty) {
+                alert('Keine erledigten Bestellungen gefunden.');
+                return;
+            }
+            const batch = db.batch();
+            snapshot.forEach(doc => { batch.delete(doc.ref); });
+            await batch.commit();
+            alert(`${snapshot.size} erledigte Bestellungen gelöscht.`);
+        } catch (error) {
+            console.error('Fehler beim Löschen:', error);
+            alert('Fehler: ' + error.message);
         }
-        
-        const batch = db.batch();
-        snapshot.forEach(doc => {
-            batch.delete(doc.ref);
-        });
-        
-        await batch.commit();
-        alert(`${snapshot.size} erledigte Bestellungen gelöscht.`);
-    } catch (error) {
-        console.error('Fehler beim Löschen:', error);
-        alert('Fehler: ' + error.message);
-    }
-});
+    });
+
     setupAutocomplete(articleInput, articleAutocomplete, 'article');
     setupAutocomplete(productInput, productAutocomplete, 'product');
 
@@ -177,8 +191,6 @@ cleanupBtn.addEventListener('click', async () => {
 
     form.addEventListener('submit', async function(e) {
         e.preventDefault();
-        
-        // --- Doppelklick-Schutz: Totzeit 1200 ms ---
         submitBtn.disabled = true;
         const originalBtnText = submitBtn.textContent;
         submitBtn.textContent = 'Bitte warten...';
@@ -186,26 +198,17 @@ cleanupBtn.addEventListener('click', async () => {
             submitBtn.disabled = false;
             submitBtn.textContent = originalBtnText;
         }, 1200);
-        // --------------------------------------------
         
         const articleNumber = document.getElementById('articleNumber').value.trim();
         const productName = document.getElementById('productName').value.trim();
         const quantity = parseFloat(document.getElementById('quantity').value);
         const unit = document.getElementById('unit').value;
         const errorMsg = document.getElementById('errorMessage');
-
-        // --- Prüfen, ob die Artikelnummer eine reine Zahl ist ---
         const isNumericArticle = /^\d+$/.test(articleNumber);
 
-        // 1. Prüfen, ob der Artikel bereits als "fehlend" markiert ist
-        //    Nur bei numerischen Artikelnummern - Strings wie "??" werden ignoriert
         if (isNumericArticle) {
             try {
-                const missingCheck = await db.collection('orders')
-                    .where('articleNumber', '==', articleNumber)
-                    .where('status', '==', 'fehlend')
-                    .get();
-
+                const missingCheck = await db.collection('orders').where('articleNumber', '==', articleNumber).where('status', '==', 'fehlend').get();
                 if (!missingCheck.empty) {
                     errorMsg.textContent = `⚠️ "${productName}" (Art-Nr: ${articleNumber}) ist zur Zeit nicht verfügbar!`;
                     errorMsg.style.display = 'block';
@@ -217,7 +220,6 @@ cleanupBtn.addEventListener('click', async () => {
             }
         }
 
-        // 2. Normaler Bestellvorgang
         const formData = {
             articleNumber: articleNumber,
             productName: productName,
@@ -282,7 +284,6 @@ cleanupBtn.addEventListener('click', async () => {
             });
 
             ordersList.innerHTML = ''; 
-            
             if (orders.length === 0) { 
                 ordersList.innerHTML = '<div class="no-orders">Keine Bestellungen in dieser Kategorie</div>'; 
                 return; 
@@ -345,23 +346,74 @@ cleanupBtn.addEventListener('click', async () => {
         }); 
     });
 
+    // --- Fehlende Artikel mit Lieferanten-Filter ---
     let usedItemsVisible = false;
+    let currentSupplierFilter = 'all';
+    let cachedMissingOrders = []; // Zwischenspeicher für fehlende Artikel
+    let usedUnsub = null; 
+
     const toggleUsedBtn = document.getElementById('toggleUsedBtn');
     const usedItemsList = document.getElementById('usedItemsList');
+    const usedItemsFilterContainer = document.getElementById('usedItemsFilterContainer');
+    const supplierFilterSelect = document.getElementById('supplierFilter');
 
     function renderUsedItems(orders) { 
-        if (orders.length === 0) { 
-            usedItemsList.innerHTML = '<div class="no-orders">Keine fehlenden Artikel</div>'; 
+        // 1. Eindeutige Lieferanten aus den aktuellen fehlenden Artikeln ermitteln
+        const uniqueSuppliers = new Set();
+        orders.forEach(order => {
+            const supplier = getSupplierByArticleNumber(order.articleNumber);
+            uniqueSuppliers.add(supplier);
+        });
+
+        // 2. Dropdown aktualisieren
+        const currentSelection = supplierFilterSelect.value;
+        supplierFilterSelect.innerHTML = '<option value="all">Alle Lieferanten</option>';
+        Array.from(uniqueSuppliers).sort().forEach(supplier => {
+            const option = document.createElement('option');
+            option.value = supplier;
+            option.textContent = supplier;
+            supplierFilterSelect.appendChild(option);
+        });
+        
+        // Vorherige Auswahl beibehalten, falls noch gültig
+        if (Array.from(uniqueSuppliers).includes(currentSelection)) {
+            supplierFilterSelect.value = currentSelection;
+        } else {
+            supplierFilterSelect.value = 'all';
+            currentSupplierFilter = 'all';
+        }
+
+        // 3. Liste filtern und rendern
+        usedItemsList.innerHTML = ''; 
+        const filteredOrders = currentSupplierFilter === 'all' 
+            ? orders 
+            : orders.filter(order => getSupplierByArticleNumber(order.articleNumber) === currentSupplierFilter);
+
+        if (filteredOrders.length === 0) { 
+            usedItemsList.innerHTML = '<div class="no-orders">Keine fehlenden Artikel für diesen Lieferanten</div>'; 
             return; 
         } 
-        usedItemsList.innerHTML = ''; 
-        orders.forEach((order) => { 
+
+        filteredOrders.forEach((order) => { 
+            const supplier = getSupplierByArticleNumber(order.articleNumber);
             const card = document.createElement('div'); 
             card.className = 'order-card'; 
             card.style.borderLeftColor = '#f44336'; 
             card.dataset.orderId = order.id; 
             const deliveryDisplay = getRelativeDeliveryLabel(order.timestamp); 
-            card.innerHTML = `<div class="order-header"><div class="order-product">${order.productName}</div><div class="order-quantity">${order.quantity}&nbsp;${order.unit}</div><div class="order-status" style="background:#f44336;">Fehlend</div></div><div class="order-details">Art-Nr: ${order.articleNumber} · ${order.department || ''}, 📅 ${deliveryDisplay}, ${order.deliveryTime || ''}</div>`; 
+            
+            card.innerHTML = `
+                <div class="order-header">
+                    <div class="order-product">${order.productName}</div>
+                    <div class="order-quantity">${order.quantity}&nbsp;${order.unit}</div>
+                    <div class="order-status" style="background:#f44336;">Fehlend</div>
+                </div>
+                <div class="order-details">
+                    Art-Nr: ${order.articleNumber} <br>
+                    <strong>Lieferant:</strong> ${supplier} <br>
+                    📅 ${deliveryDisplay}
+                </div>`; 
+            
             card.addEventListener('click', async () => { 
                 try { 
                     await db.collection('orders').doc(order.id).update({ status: 'erledigt' }); 
@@ -375,17 +427,20 @@ cleanupBtn.addEventListener('click', async () => {
         }); 
     }
 
-    let usedUnsub = null; 
     toggleUsedBtn.addEventListener('click', () => { 
         usedItemsVisible = !usedItemsVisible;
         usedItemsList.style.display = usedItemsVisible ? 'block' : 'none'; 
+        usedItemsFilterContainer.style.display = usedItemsVisible ? 'block' : 'none'; // Filter ein-/ausblenden
         toggleUsedBtn.textContent = usedItemsVisible ? '❌' : '🚫'; 
+        
         if (usedItemsVisible) { 
             usedUnsub = db.collection('orders').where('status', '==', 'fehlend').onSnapshot((snapshot) => { 
-                const orders = []; 
-                snapshot.forEach(doc => { orders.push({ id: doc.id, ...doc.data() }); }); 
-                orders.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0)); 
-                renderUsedItems(orders); 
+                cachedMissingOrders = []; 
+                snapshot.forEach(doc => { 
+                    cachedMissingOrders.push({ id: doc.id, ...doc.data() }); 
+                }); 
+                cachedMissingOrders.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0)); 
+                renderUsedItems(cachedMissingOrders); 
             }, (error) => { 
                 console.error('Fehler beim Laden der fehlenden Artikel:', error); 
                 usedItemsList.innerHTML = `<div class="no-orders">Fehler: ${error.message}</div>`; 
@@ -394,6 +449,14 @@ cleanupBtn.addEventListener('click', async () => {
             if (usedUnsub) { usedUnsub(); usedUnsub = null; } 
         } 
     });
+
+    // Event Listener für den Lieferanten-Filter
+    supplierFilterSelect.addEventListener('change', (e) => {
+        currentSupplierFilter = e.target.value;
+        // Liste mit dem neuen Filter neu rendern (aus dem Cache, keine DB-Abfrage)
+        renderUsedItems(cachedMissingOrders);
+    });
+    // -------------------------------------------------------------
 
     document.getElementById('ordersList').addEventListener('click', async (e) => { 
         const orderId = e.target.closest('[data-id]')?.dataset.id; 
