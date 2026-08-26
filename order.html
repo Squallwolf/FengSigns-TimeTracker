@@ -489,15 +489,21 @@
         exportPdfBtn.textContent = '⏳ Wird erstellt...';
 
         try {
-            // 1. Temporäre HTML-Tabelle erstellen (unsichtbar, aber im DOM für html2canvas)
+            // 1. Temporäre HTML-Tabelle erstellen
             const tempDiv = document.createElement('div');
-            tempDiv.style.position = 'absolute';
-            tempDiv.style.left = '-9999px';
+            // FIX: opacity: 0 statt left: -9999px. Moderne Browser rendern Elemente außerhalb 
+            // des Viewports nicht mehr, was zu leeren PDFs führte.
+            tempDiv.style.position = 'fixed';
             tempDiv.style.top = '0';
-            tempDiv.style.width = '800px'; // Feste Breite für konsistentes Rendering
+            tempDiv.style.left = '0';
+            tempDiv.style.width = '800px';
+            tempDiv.style.opacity = '0';
+            tempDiv.style.pointerEvents = 'none';
+            tempDiv.style.zIndex = '-9999';
+            tempDiv.style.backgroundColor = 'white';
             
             let tableHTML = `
-                <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; background: white; color: black;">
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: black;">
                     <h2 style="margin: 0 0 5px 0; font-size: 20px; color: #333;">
                         ${currentSupplierFilter === 'all' ? 'Bestellliste: Alle Lieferanten' : `Bestellliste: ${currentSupplierFilter}`}
                     </h2>
@@ -535,7 +541,7 @@
             tempDiv.innerHTML = tableHTML;
             document.body.appendChild(tempDiv);
 
-            // 2. PDF mit jsPDF html() Methode generieren (unterstützt UTF-8 & Emojis perfekt)
+            // 2. PDF mit jsPDF html() Methode generieren
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
 
@@ -549,7 +555,9 @@
                     pdf.save(fileName);
                     
                     // Aufräumen
-                    document.body.removeChild(tempDiv);
+                    if (document.body.contains(tempDiv)) {
+                        document.body.removeChild(tempDiv);
+                    }
                     exportPdfBtn.disabled = false;
                     exportPdfBtn.textContent = '📄 PDF exportieren';
                 },
@@ -562,9 +570,10 @@
         } catch (error) {
             console.error('Fehler beim PDF-Export:', error);
             alert('Fehler beim Erstellen der PDF: ' + error.message);
-            // Sicherstellen, dass aufgeräumt wird, falls ein Fehler auftritt
-            const tempDiv = document.querySelector('div[style*="-9999px"]');
-            if (tempDiv) document.body.removeChild(tempDiv);
+            const tempDiv = document.querySelector('div[style*="opacity: 0"]');
+            if (tempDiv && document.body.contains(tempDiv)) {
+                document.body.removeChild(tempDiv);
+            }
             exportPdfBtn.disabled = false;
             exportPdfBtn.textContent = '📄 PDF exportieren';
         }
