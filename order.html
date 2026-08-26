@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+
     <title>Lager Bestellung</title>
+    
+    <!-- jsPDF und AutoTable für PDF-Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
     <style>
         .order-card.vorbereitet { 
             cursor: pointer; 
@@ -88,11 +94,14 @@
     </div>
 
     <!-- Filterzeile für fehlende Artikel (initial ausgeblendet) -->
-    <div id="usedItemsFilterContainer" style="display: none; margin-top: 15px; padding: 10px; background: #f0f4f8; border-radius: 8px;">
-        <label for="supplierFilter" style="font-size: 13px; font-weight: 600; color: #444; margin-right: 8px;">Nach Lieferant filtern:</label>
-        <select id="supplierFilter" style="width: auto; min-width: 200px; padding: 6px 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+    <div id="usedItemsFilterContainer" style="display: none; margin-top: 15px; padding: 10px; background: #f0f4f8; border-radius: 8px; flex-wrap: wrap; gap: 10px; align-items: center;">
+        <label for="supplierFilter" style="font-size: 13px; font-weight: 600; color: #444;">Nach Lieferant filtern:</label>
+        <select id="supplierFilter" style="flex: 1; min-width: 150px; padding: 6px 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
             <option value="all">Alle Lieferanten</option>
         </select>
+        <button id="exportPdfBtn" style="padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 5px; transition: background 0.2s;">
+            📄 PDF exportieren
+        </button>
     </div>
 
     <div id="usedItemsList" class="orders-list" style="display: none; margin-top: 10px; max-height: 300px; overflow-y: auto;">
@@ -124,7 +133,6 @@
         loadProducts().then(() => { document.getElementById('articleNumber')?.focus(); }); 
     });
 
-    // Hilfsfunktion: Lieferant anhand der Artikelnummer aus productsDB ermitteln
     function getSupplierByArticleNumber(articleNumber) {
         const product = productsDB.find(p => String(p.articleNumber).trim() === String(articleNumber).trim());
         return product && product.supplier ? product.supplier.trim() : 'Unbekannt';
@@ -349,23 +357,22 @@
     // --- Fehlende Artikel mit Lieferanten-Filter ---
     let usedItemsVisible = false;
     let currentSupplierFilter = 'all';
-    let cachedMissingOrders = []; // Zwischenspeicher für fehlende Artikel
+    let cachedMissingOrders = []; 
     let usedUnsub = null; 
 
     const toggleUsedBtn = document.getElementById('toggleUsedBtn');
     const usedItemsList = document.getElementById('usedItemsList');
     const usedItemsFilterContainer = document.getElementById('usedItemsFilterContainer');
     const supplierFilterSelect = document.getElementById('supplierFilter');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
 
     function renderUsedItems(orders) { 
-        // 1. Eindeutige Lieferanten aus den aktuellen fehlenden Artikeln ermitteln
         const uniqueSuppliers = new Set();
         orders.forEach(order => {
             const supplier = getSupplierByArticleNumber(order.articleNumber);
             uniqueSuppliers.add(supplier);
         });
 
-        // 2. Dropdown aktualisieren
         const currentSelection = supplierFilterSelect.value;
         supplierFilterSelect.innerHTML = '<option value="all">Alle Lieferanten</option>';
         Array.from(uniqueSuppliers).sort().forEach(supplier => {
@@ -375,7 +382,6 @@
             supplierFilterSelect.appendChild(option);
         });
         
-        // Vorherige Auswahl beibehalten, falls noch gültig
         if (Array.from(uniqueSuppliers).includes(currentSelection)) {
             supplierFilterSelect.value = currentSelection;
         } else {
@@ -383,7 +389,6 @@
             currentSupplierFilter = 'all';
         }
 
-        // 3. Liste filtern und rendern
         usedItemsList.innerHTML = ''; 
         const filteredOrders = currentSupplierFilter === 'all' 
             ? orders 
@@ -430,7 +435,7 @@
     toggleUsedBtn.addEventListener('click', () => { 
         usedItemsVisible = !usedItemsVisible;
         usedItemsList.style.display = usedItemsVisible ? 'block' : 'none'; 
-        usedItemsFilterContainer.style.display = usedItemsVisible ? 'block' : 'none'; // Filter ein-/ausblenden
+        usedItemsFilterContainer.style.display = usedItemsVisible ? 'flex' : 'none'; 
         toggleUsedBtn.textContent = usedItemsVisible ? '❌' : '🚫'; 
         
         if (usedItemsVisible) { 
@@ -450,11 +455,76 @@
         } 
     });
 
-    // Event Listener für den Lieferanten-Filter
     supplierFilterSelect.addEventListener('change', (e) => {
         currentSupplierFilter = e.target.value;
-        // Liste mit dem neuen Filter neu rendern (aus dem Cache, keine DB-Abfrage)
         renderUsedItems(cachedMissingOrders);
+    });
+
+    // --- PDF Export Logik ---
+    exportPdfBtn.addEventListener('click', () => {
+        if (cachedMissingOrders.length === 0) {
+            alert('Keine fehlenden Artikel zum Exportieren vorhanden.');
+            return;
+        }
+
+        // 1. Daten filtern
+        let exportData = currentSupplierFilter === 'all' 
+            ? [...cachedMissingOrders] 
+            : cachedMissingOrders.filter(order => getSupplierByArticleNumber(order.articleNumber) === currentSupplierFilter);
+
+        if (exportData.length === 0) {
+            alert('Keine fehlenden Artikel für den gewählten Filter vorhanden.');
+            return;
+        }
+
+        // 2. Daten für Tabelle aufbereiten
+        let tableData = exportData.map(order => {
+            const supplier = getSupplierByArticleNumber(order.articleNumber);
+            const date = order.timestamp ? (order.timestamp.toDate ? order.timestamp.toDate().toLocaleDateString('de-DE') : 'Unbekannt') : 'Unbekannt';
+            return [
+                supplier,
+                order.articleNumber,
+                order.productName,
+                `${order.quantity} ${order.unit}`,
+                date
+            ];
+        });
+
+        // 3. Wenn "Alle", nach Lieferant sortieren
+        if (currentSupplierFilter === 'all') {
+            tableData.sort((a, b) => a[0].localeCompare(b[0], 'de'));
+        }
+
+        // 4. PDF generieren
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        const titleText = currentSupplierFilter === 'all' ? 'Bestellliste: Alle Lieferanten' : `Bestellliste: ${currentSupplierFilter}`;
+        const dateStr = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
+        
+        doc.setFontSize(16);
+        doc.text(titleText, 14, 15);
+        doc.setFontSize(10);
+        doc.text(`Erstellt am: ${new Date().toLocaleString('de-DE')}`, 14, 22);
+
+        doc.autoTable({
+            startY: 28,
+            head: [['Lieferant', 'Art-Nr', 'Produktname', 'Menge', 'Datum']],
+            body: tableData,
+            theme: 'grid',
+            headStyles: { fillColor: [102, 126, 234] }, // Passt zum App-Design (#667eea)
+            styles: { fontSize: 9, cellPadding: 3 },
+            columnStyles: {
+                0: { fontStyle: 'bold', cellWidth: 40 }, // Lieferant fett
+                2: { cellWidth: 'auto' }                 // Produktname bekommt Restbreite
+            }
+        });
+
+        const fileName = currentSupplierFilter === 'all' 
+            ? `Bestellliste_Alle_${dateStr}.pdf` 
+            : `Bestellliste_${currentSupplierFilter.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_')}_${dateStr}.pdf`;
+        
+        doc.save(fileName);
     });
     // -------------------------------------------------------------
 
