@@ -7,7 +7,7 @@
 
     <title>Lager Bestellung</title>
     
-    <!-- jsPDF und html2canvas für perfekten UTF-8 & Emoji Support im PDF -->
+    <!-- jsPDF und html2canvas -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -460,7 +460,7 @@
         renderUsedItems(cachedMissingOrders);
     });
 
-    // --- PDF Export Logik (UTF-8 & Emoji sicher via html2canvas) ---
+    // --- PDF Export Logik (Robuster Direkt-Ansatz mit html2canvas + jsPDF.addImage) ---
     exportPdfBtn.addEventListener('click', async () => {
         if (cachedMissingOrders.length === 0) {
             alert('Keine fehlenden Artikel zum Exportieren vorhanden.');
@@ -476,7 +476,6 @@
             return;
         }
 
-        // Sortierung bei "Alle" nach Lieferant
         if (currentSupplierFilter === 'all') {
             exportData.sort((a, b) => {
                 const supA = getSupplierByArticleNumber(a.articleNumber);
@@ -488,90 +487,138 @@
         exportPdfBtn.disabled = true;
         exportPdfBtn.textContent = '⏳ Wird erstellt...';
 
-        try {
-            // 1. Temporäre HTML-Tabelle erstellen
-            const tempDiv = document.createElement('div');
-            // FIX: opacity: 0 statt left: -9999px. Moderne Browser rendern Elemente außerhalb 
-            // des Viewports nicht mehr, was zu leeren PDFs führte.
-            tempDiv.style.position = 'fixed';
-            tempDiv.style.top = '0';
-            tempDiv.style.left = '0';
-            tempDiv.style.width = '800px';
-            tempDiv.style.opacity = '0';
-            tempDiv.style.pointerEvents = 'none';
-            tempDiv.style.zIndex = '-9999';
-            tempDiv.style.backgroundColor = 'white';
-            
-            let tableHTML = `
-                <div style="font-family: 'Segoe UI', Arial, sans-serif; padding: 20px; color: black;">
-                    <h2 style="margin: 0 0 5px 0; font-size: 20px; color: #333;">
-                        ${currentSupplierFilter === 'all' ? 'Bestellliste: Alle Lieferanten' : `Bestellliste: ${currentSupplierFilter}`}
-                    </h2>
-                    <p style="margin: 0 0 20px 0; font-size: 12px; color: #666;">
-                        Erstellt am: ${new Date().toLocaleString('de-DE')}
-                    </p>
-                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                        <thead>
-                            <tr style="background-color: #667eea; color: white;">
-                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Lieferant</th>
-                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Art-Nr</th>
-                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Produktname</th>
-                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Menge</th>
-                                <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Datum</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
-            exportData.forEach(order => {
-                const supplier = getSupplierByArticleNumber(order.articleNumber);
-                const date = order.timestamp ? (order.timestamp.toDate ? order.timestamp.toDate().toLocaleDateString('de-DE') : 'Unbekannt') : 'Unbekannt';
-                tableHTML += `
-                    <tr>
-                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: 600;">${supplier}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${order.articleNumber}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${order.productName}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${order.quantity} ${order.unit}</td>
-                        <td style="padding: 8px; border: 1px solid #ddd;">${date}</td>
+        // 1. HTML-Tabelle erstellen und ins DOM einfügen
+        const tempDiv = document.createElement('div');
+        tempDiv.id = 'pdf-export-temp';
+        // WICHTIG: Element MUSS im sichtbaren Bereich sein, damit html2canvas es rendert.
+        // Wir nutzen z-index: -1 und pointer-events: none, damit es für Nutzer unsichtbar ist.
+        tempDiv.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 800px;
+            background: white;
+            z-index: -1;
+            pointer-events: none;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            padding: 20px;
+            color: black;
+        `;
+        
+        let tableHTML = `
+            <h2 style="margin: 0 0 5px 0; font-size: 20px; color: #333;">
+                ${currentSupplierFilter === 'all' ? 'Bestellliste: Alle Lieferanten' : `Bestellliste: ${currentSupplierFilter}`}
+            </h2>
+            <p style="margin: 0 0 20px 0; font-size: 12px; color: #666;">
+                Erstellt am: ${new Date().toLocaleString('de-DE')}
+            </p>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background-color: #667eea; color: white;">
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Lieferant</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Art-Nr</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Produktname</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Menge</th>
+                        <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">Datum</th>
                     </tr>
-                `;
+                </thead>
+                <tbody>
+        `;
+
+        exportData.forEach(order => {
+            const supplier = getSupplierByArticleNumber(order.articleNumber);
+            const date = order.timestamp ? (order.timestamp.toDate ? order.timestamp.toDate().toLocaleDateString('de-DE') : 'Unbekannt') : 'Unbekannt';
+            tableHTML += `
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #ddd; font-weight: 600;">${supplier}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">${order.articleNumber}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">${order.productName}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">${order.quantity} ${order.unit}</td>
+                    <td style="padding: 8px; border: 1px solid #ddd;">${date}</td>
+                </tr>
+            `;
+        });
+
+        tableHTML += `</tbody></table>`;
+        tempDiv.innerHTML = tableHTML;
+        document.body.appendChild(tempDiv);
+
+        try {
+            // 2. html2canvas DIREKT aufrufen (nicht über doc.html)
+            // Kleine Verzögerung, damit der Browser Zeit hat, das Element zu rendern
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            const canvas = await html2canvas(tempDiv, {
+                scale: 2, // Höhere Qualität
+                backgroundColor: '#ffffff',
+                useCORS: true,
+                logging: false
             });
 
-            tableHTML += `</tbody></table></div>`;
-            tempDiv.innerHTML = tableHTML;
-            document.body.appendChild(tempDiv);
-
-            // 2. PDF mit jsPDF html() Methode generieren
+            // 3. Canvas in jsPDF einfügen
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
+            
+            const pageWidth = 210;  // A4 Breite in mm
+            const pageHeight = 297; // A4 Höhe in mm
+            const margin = 10;
+            const usableWidth = pageWidth - (2 * margin);
+            const usableHeight = pageHeight - (2 * margin);
+            
+            // Bild-Dimensionen berechnen
+            const imgWidth = usableWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+            
+            // Wenn das Bild auf eine Seite passt
+            if (imgHeight <= usableHeight) {
+                doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, imgHeight);
+            } else {
+                // Mehrseitiges PDF: Canvas in Slices schneiden
+                const canvasWidthPx = canvas.width;
+                const canvasHeightPx = canvas.height;
+                const sliceHeightPx = (usableHeight / imgWidth) * canvasWidthPx;
+                
+                let position = 0;
+                let pageNumber = 0;
+                
+                while (position < canvasHeightPx) {
+                    if (pageNumber > 0) doc.addPage();
+                    
+                    // Temporäres Canvas für den aktuellen Ausschnitt
+                    const sliceCanvas = document.createElement('canvas');
+                    sliceCanvas.width = canvasWidthPx;
+                    sliceCanvas.height = Math.min(sliceHeightPx, canvasHeightPx - position);
+                    const ctx = sliceCanvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+                    ctx.drawImage(
+                        canvas, 
+                        0, position, canvasWidthPx, sliceCanvas.height,
+                        0, 0, canvasWidthPx, sliceCanvas.height
+                    );
+                    
+                    const sliceImgHeight = (sliceCanvas.height * imgWidth) / canvasWidthPx;
+                    doc.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, sliceImgHeight);
+                    
+                    position += sliceHeightPx;
+                    pageNumber++;
+                }
+            }
 
-            await doc.html(tempDiv, {
-                callback: function (pdf) {
-                    const dateStr = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
-                    const fileName = currentSupplierFilter === 'all' 
-                        ? `Bestellliste_Alle_${dateStr}.pdf` 
-                        : `Bestellliste_${currentSupplierFilter.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_')}_${dateStr}.pdf`;
-                    
-                    pdf.save(fileName);
-                    
-                    // Aufräumen
-                    if (document.body.contains(tempDiv)) {
-                        document.body.removeChild(tempDiv);
-                    }
-                    exportPdfBtn.disabled = false;
-                    exportPdfBtn.textContent = '📄 PDF exportieren';
-                },
-                x: 10,
-                y: 10,
-                width: 190, // A4 Breite (210mm) minus Ränder (2x10mm)
-                windowWidth: 800 // Entspricht der CSS-Breite des tempDiv
-            });
+            // 4. PDF speichern
+            const dateStr = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
+            const fileName = currentSupplierFilter === 'all' 
+                ? `Bestellliste_Alle_${dateStr}.pdf` 
+                : `Bestellliste_${currentSupplierFilter.replace(/[^a-zA-Z0-9äöüÄÖÜß]/g, '_')}_${dateStr}.pdf`;
+            
+            doc.save(fileName);
 
         } catch (error) {
             console.error('Fehler beim PDF-Export:', error);
             alert('Fehler beim Erstellen der PDF: ' + error.message);
-            const tempDiv = document.querySelector('div[style*="opacity: 0"]');
-            if (tempDiv && document.body.contains(tempDiv)) {
+        } finally {
+            // 5. Aufräumen
+            if (document.body.contains(tempDiv)) {
                 document.body.removeChild(tempDiv);
             }
             exportPdfBtn.disabled = false;
