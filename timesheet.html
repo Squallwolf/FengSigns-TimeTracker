@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
     <title>Stundenzettel</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,7 +13,9 @@
         
         .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
         select { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem; background: #f9f9f9; }
-        .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; }
+        .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; transition: all 0.3s ease; }
+        .back-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+        .back-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
         
         .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 550px; }
@@ -42,6 +44,11 @@
         .modal-btn.save { background: #667eea; color: white; }
         .modal-btn.cancel { background: #e0e0e0; color: #333; }
     </style>
+    
+    <!-- PDF Export Bibliotheken -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
@@ -51,6 +58,7 @@
     
     <div class="controls">
       <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
+      <button id="exportPdfBtn" class="back-btn" style="background: #059669;" onclick="exportCurrentMonthPDF()" disabled>📄 PDF Export</button>
       <a href="index.html" class="back-btn">← Zurück</a>
     </div>
 
@@ -117,18 +125,16 @@
     const employeeSelect = document.getElementById('employeeSelect');
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
 
     function isEditable(dateKey) {
       const parts = dateKey.split('-');
       const entryDate = new Date(parts[0], parts[1] - 1, parts[2]);
       entryDate.setHours(0, 0, 0, 0);
-      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      
       const diffTime = today - entryDate;
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      
       return diffDays >= 0 && diffDays <= 2;
     }
 
@@ -162,6 +168,11 @@
       return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
     }
 
+    function fmtDate(d) { 
+      const date = toDateSafe(d); 
+      return date ? date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) : ''; 
+    }
+
     function fmtTime(val) {
       const d = toDateSafe(val);
       return d ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '-';
@@ -173,6 +184,34 @@
       return h > 0 ? `${h}h ${m}m` : `${m}min`;
     }
 
+    function fmtKey(d) {
+      const date = toDateSafe(d); 
+      return date ? date.toISOString().slice(0, 10) : ''; 
+    }
+
+    function msToMin(ms) { return Math.floor(ms / 60000); }
+
+    function getRequiredBreak(workMinutes) { 
+      if (workMinutes >= 540) return 45; 
+      if (workMinutes >= 360) return 30; 
+      return 0; 
+    }
+
+    function analyzeDay(entries) {
+      let workMin = 0, breakMin = 0;
+      for(let i = 0; i < entries.length; i++) {
+        const s = toDateSafe(entries[i].startTime), e = toDateSafe(entries[i].endTime);
+        if(!s || !e) continue; workMin += msToMin(e - s);
+      }
+      const sorted = [...entries].sort((a, b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+      for(let i = 0; i < sorted.length - 1; i++) {
+        const endOfThis = toDateSafe(sorted[i].endTime), startOfNext = toDateSafe(sorted[i+1].startTime);
+        if(endOfThis && startOfNext) breakMin += msToMin(startOfNext - endOfThis);
+      }
+      const req = getRequiredBreak(workMin);
+      return { workMin, breakMin, req, deficit: Math.max(0, req - breakMin) };
+    }
+
     function showError(msg) {
       errorMsg.textContent = msg;
       errorMsg.style.display = 'block';
@@ -182,9 +221,11 @@
     async function loadTimesheet(user) {
       if (!user) {
         tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
+        exportPdfBtn.disabled = true;
         return;
       }
       currentUser = user;
+      exportPdfBtn.disabled = false;
       localStorage.setItem('tz_user', user);
       tableContainer.innerHTML = '<div class="loading">Lade Daten...</div>';
       errorMsg.style.display = 'none';
@@ -230,15 +271,12 @@
           byDay[dateKey].push(entry);
         });
 
-        // Letzte 3 Tage immer hinzufügen (aber nur, wenn sie im aktuellen Monat liegen)
         for (let i = 0; i < 3; i++) {
           const d = new Date(now);
           d.setDate(now.getDate() - i);
           if (d >= monthStart) {
             const dateKey = d.toISOString().slice(0, 10);
-            if (!byDay[dateKey]) {
-              byDay[dateKey] = [];
-            }
+            if (!byDay[dateKey]) byDay[dateKey] = [];
           }
         }
 
@@ -302,11 +340,9 @@
             if (entries.length <= 2) {
               const d1 = entries[0];
               const d2 = entries[1] || null;
-              
               const inTime = fmtTime(d1.startTime);
               const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
               const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
-              
               html += `<tr>
                 <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
                 <td>${inTime}</td>
@@ -322,7 +358,6 @@
                 const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
                 const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
                 const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button>` : '';
-                
                 html += `<tr>
                   <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
                   <td>${fmtTime(entry.startTime)}</td>
@@ -336,13 +371,11 @@
           } else {
             const d1 = entries[0];
             const d2 = entries[1] || null;
-            
             const inTime = fmtTime(d1.startTime);
             const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
             const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
             const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
             const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
-            
             html += `<tr>
               <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
               <td>${inTime}</td>
@@ -453,7 +486,6 @@
             const start1 = new Date(baseDate);
             const [h1, m1] = inTime.split(':');
             start1.setHours(parseInt(h1), parseInt(m1), 0, 0);
-            
             const end1 = new Date(baseDate);
             const [h2, m2] = pauseInTime.split(':');
             end1.setHours(parseInt(h2), parseInt(m2), 0, 0);
@@ -468,7 +500,6 @@
             const start2 = new Date(baseDate);
             const [h3, m3] = pauseOutTime.split(':');
             start2.setHours(parseInt(h3), parseInt(m3), 0, 0);
-            
             const end2 = new Date(baseDate);
             const [h4, m4] = outTime.split(':');
             end2.setHours(parseInt(h4), parseInt(m4), 0, 0);
@@ -483,7 +514,6 @@
             const start = new Date(baseDate);
             const [h1, m1] = inTime.split(':');
             start.setHours(parseInt(h1), parseInt(m1), 0, 0);
-            
             const end = new Date(baseDate);
             const [h2, m2] = outTime.split(':');
             end.setHours(parseInt(h2), parseInt(m2), 0, 0);
@@ -505,12 +535,10 @@
           
           if (pauseInTime && pauseOutTime) {
             await updateEntry(dayEntries[0].id, inTime, pauseInTime);
-            
             const baseDate = toDateSafe(dayEntries[0].startTime);
             const newStart = new Date(baseDate);
             const [h1, m1] = pauseOutTime.split(':');
             newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
-            
             const newEnd = new Date(baseDate);
             const [h2, m2] = outTime.split(':');
             newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
@@ -569,6 +597,105 @@
       }
 
       await db.collection('entries').doc(id).update(updateData);
+    }
+
+    async function exportCurrentMonthPDF() {
+      if (!currentUser) {
+        alert('Bitte zuerst Mitarbeiter auswählen.');
+        return;
+      }
+      
+      exportPdfBtn.disabled = true;
+      const originalText = exportPdfBtn.textContent;
+      exportPdfBtn.textContent = 'Erstelle...';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        
+        const snap = await db.collection('entries')
+          .where('employee', '==', currentUser)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+          
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+        
+        const byDay = {};
+        entries.forEach(e => { 
+          const s = toDateSafe(e.startTime); 
+          if(!s) return; 
+          const key = fmtKey(s); 
+          if(!byDay[key]) byDay[key] = []; 
+          byDay[key].push(e); 
+        });
+        
+        const tableData = []; 
+        let totalMonth = 0;
+        
+        Object.keys(byDay).sort().forEach(dayKey => {
+          const dayEntries = byDay[dayKey];
+          const stats = analyzeDay(dayEntries);
+          const displayedWorkMin = stats.workMin; 
+          totalMonth += displayedWorkMin;
+          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          let outDisplay;
+          if (stats.deficit > 0) {
+            const firstIn = toDateSafe(dayEntries[0].startTime);
+            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
+            outDisplay = fmtTime(adjustedOut);
+          } else {
+            const lastEntry = dayEntries[dayEntries.length-1];
+            outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
+          }
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
+        });
+        
+        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+        
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF();
+        doc.setFontSize(16); 
+        doc.text(`Arbeitszeitnachweis (Laufend): ${currentUser}`, 14, 20);
+        doc.setFontSize(10); 
+        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+        
+        doc.autoTable({ 
+          startY: 35, 
+          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], 
+          body: tableData, 
+          theme: 'grid', 
+          headStyles: { fillColor: [5, 150, 105] }, 
+          styles: { fontSize: 9, cellPadding: 3 }, 
+          columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, 
+          didDrawPage: function(data) { 
+            if (data.pageNumber === doc.internal.getNumberOfPages()) { 
+              const finalY = data.cursor.y + 10; 
+              doc.setLineWidth(0.5); 
+              doc.line(14, finalY, 90, finalY); 
+              doc.line(100, finalY, 180, finalY); 
+              doc.setFontSize(9); 
+              doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); 
+              doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); 
+              doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); 
+            } 
+          } 
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const filename = `Zeiten_Laufend_${currentUser}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; 
+        doc.save(filename);
+        
+      } catch(e) { 
+        console.error("Export error:", e); 
+        alert("Export-Fehler: " + e.message); 
+      } finally {
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.textContent = originalText;
+      }
     }
 
     employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
