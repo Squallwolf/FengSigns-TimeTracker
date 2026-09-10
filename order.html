@@ -460,7 +460,7 @@
         renderUsedItems(cachedMissingOrders);
     });
 
-    // --- PDF Export Logik (Robuster Direkt-Ansatz mit html2canvas + jsPDF.addImage) ---
+    // --- PDF Export Logik (html2canvas + jsPDF.addImage) ---
     exportPdfBtn.addEventListener('click', async () => {
         if (cachedMissingOrders.length === 0) {
             alert('Keine fehlenden Artikel zum Exportieren vorhanden.');
@@ -491,7 +491,7 @@
         const tempDiv = document.createElement('div');
         tempDiv.id = 'pdf-export-temp';
         // WICHTIG: Element MUSS im sichtbaren Bereich sein, damit html2canvas es rendert.
-        // Wir nutzen z-index: -1 und pointer-events: none, damit es für Nutzer unsichtbar ist.
+        // z-index: -1 und pointer-events: none, damit es für Nutzer unsichtbar ist.
         tempDiv.style.cssText = `
             position: fixed;
             top: 0;
@@ -546,7 +546,7 @@
         try {
             // 2. html2canvas DIREKT aufrufen (nicht über doc.html)
             // Kleine Verzögerung, damit der Browser Zeit hat, das Element zu rendern
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise(resolve => setTimeout(resolve, 20));
             
             const canvas = await html2canvas(tempDiv, {
                 scale: 2, // Höhere Qualität
@@ -568,39 +568,79 @@
             // Bild-Dimensionen berechnen
             const imgWidth = usableWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            
+            --------------------------------------
             // Wenn das Bild auf eine Seite passt
             if (imgHeight <= usableHeight) {
                 doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, imgHeight);
             } else {
-                // Mehrseitiges PDF: Canvas in Slices schneiden
-                const canvasWidthPx = canvas.width;
-                const canvasHeightPx = canvas.height;
-                const sliceHeightPx = (usableHeight / imgWidth) * canvasWidthPx;
+                // Mehrseitiges PDF: Canvas in Slices schneiden, aber NUR an Zeilengrenzen (tr), um Textabschnitte zu vermeiden
                 
-                let position = 0;
+                // 1. Y-Positionen aller Tabellenzeilen relativ zum tempDiv erfassen und mit dem html2canvas Scale-Faktor (2) multiplizieren
+                const tempDivRect = tempDiv.getBoundingClientRect();
+                const rows = tempDiv.querySelectorAll('tr');
+                const rowOffsets = [];
+                
+                rows.forEach(row => {
+                    const rect = row.getBoundingClientRect();
+                    // 2 ist der Scale-Faktor aus dem html2canvas-Aufruf weiter oben
+                    const scaledY = Math.round((rect.top - tempDivRect.top) * 2); 
+                    rowOffsets.push(scaledY);
+                });
+                // Gesamthöhe als letzte Grenze hinzufügen
+                rowOffsets.push(canvas.height);
+                
+                const canvasWidthPx = canvas.width;
+                const pixelsPerMm = canvasWidthPx / imgWidth;
+                const maxPixelsPerPage = Math.round(usableHeight * pixelsPerMm);
+                
+                let currentPosition = 0;
                 let pageNumber = 0;
                 
-                while (position < canvasHeightPx) {
+                while (currentPosition < canvas.height) {
                     if (pageNumber > 0) doc.addPage();
                     
-                    // Temporäres Canvas für den aktuellen Ausschnitt
+                    let sliceY = canvas.height;
+                    // Finde die letzte Zeile, die noch vollständig auf die aktuelle Seite passt
+                    for (let i = 0; i < rowOffsets.length; i++) {
+                        if (rowOffsets[i] > currentPosition + maxPixelsPerPage) {
+                            if (i > 0) {
+                                sliceY = rowOffsets[i - 1];
+                            } else {
+                                // Fallback, falls eine einzelne Zeile höher als eine ganze Seite ist (sehr unwahrscheinlich)
+                                sliceY = currentPosition + maxPixelsPerPage;
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Sicherheitscheck, um Endlosschleifen zu vermeiden
+                    if (sliceY <= currentPosition) {
+                        sliceY = currentPosition + maxPixelsPerPage;
+                    }
+                    if (sliceY > canvas.height) {
+                        sliceY = canvas.height;
+                    }
+                    
+                    sliceY = Math.round(sliceY);
+                    currentPosition = Math.round(currentPosition);
+                    const currentSliceHeight = Math.max(1, Math.round(sliceY - currentPosition));
+                    
                     const sliceCanvas = document.createElement('canvas');
                     sliceCanvas.width = canvasWidthPx;
-                    sliceCanvas.height = Math.min(sliceHeightPx, canvasHeightPx - position);
+                    sliceCanvas.height = currentSliceHeight;
                     const ctx = sliceCanvas.getContext('2d');
                     ctx.fillStyle = '#ffffff';
                     ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
                     ctx.drawImage(
                         canvas, 
-                        0, position, canvasWidthPx, sliceCanvas.height,
-                        0, 0, canvasWidthPx, sliceCanvas.height
+                        0, currentPosition, canvasWidthPx, currentSliceHeight,
+                        0, 0, canvasWidthPx, currentSliceHeight
                     );
                     
-                    const sliceImgHeight = (sliceCanvas.height * imgWidth) / canvasWidthPx;
+                    const sliceImgHeight = (currentSliceHeight * imgWidth) / canvasWidthPx;
                     doc.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, sliceImgHeight);
                     
-                    position += sliceHeightPx;
+                    currentPosition = sliceY;
                     pageNumber++;
                 }
             }
