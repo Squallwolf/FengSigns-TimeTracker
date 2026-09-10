@@ -568,7 +568,6 @@
             // Bild-Dimensionen berechnen
             const imgWidth = usableWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            --------------------------------------
             // Wenn das Bild auf eine Seite passt
             if (imgHeight <= usableHeight) {
                 doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, imgHeight);
