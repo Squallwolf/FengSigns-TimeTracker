@@ -7,19 +7,157 @@
     <title>Stundenzettel</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
-        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 15px; max-width: 650px; width: 100%; margin: 10px 0; }
-        h1 { text-align: center; font-size: 1.4rem; color: #333; margin-bottom: 15px; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #006060 0%, #096969 100%); 
+            min-height: 100vh; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
+
+        .container { 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
+            padding: 20px; 
+            max-width: 650px; 
+            width: 100%; 
+            margin: 20px 0 10px 0; 
+        }
+
+        /* Header-Zeile: Überschrift links, Button rechtsbündig auf gleicher Höhe */
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h1 { 
+            text-align: left; 
+            font-size: 1.4rem; 
+            color: #333; 
+            margin: 0;
+        }
+
+        .open-menu-btn { 
+            background: #000; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease; 
+        }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        /* Seitenmenü / Off-Canvas Overlay (analog order.html) */
+        .menu-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            display: none; 
+            z-index: 2000; 
+        }
+        .menu-overlay.active { display: block; }
         
+        .side-menu { 
+            position: fixed; 
+            top: 0; 
+            left: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); 
+            z-index: 2001; 
+            transition: left 0.3s ease; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            overflow-y: auto; 
+        }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { 
+            align-self: flex-end; 
+            background: none; 
+            border: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: #333; 
+        }
+        .side-menu h2 { 
+            font-size: 1.2rem; 
+            margin-bottom: 10px; 
+            color: #333; 
+            border-bottom: 2px solid #eee; 
+            padding-bottom: 5px; 
+        }
+        
+        .side-menu .nav-btn { 
+            padding: 12px; 
+            border: 1px solid #000; 
+            background: #000; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-align: center; 
+            text-decoration: none; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            transition: all 0.3s ease; 
+            display: block; 
+        }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
         .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
-        select { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 0.95rem; background: #f9f9f9; }
-        .back-btn { padding: 10px 15px; background: #667eea; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-decoration: none; font-size: 0.9rem; white-space: nowrap; transition: all 0.3s ease; }
-        .back-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
-        .back-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        select { 
+            flex: 1; 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            background: #f9f9f9; 
+            color: #333;
+        }
+        .action-btn { 
+            padding: 10px 15px; 
+            background: #059669; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            white-space: nowrap; 
+            transition: all 0.3s ease; 
+        }
+        .action-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        .action-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
         
         .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
         table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 550px; }
-        th { background: #f1f5f9; color: #475569; font-weight: 600; text-align: left; padding: 8px 6px; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #cbd5e1; white-space: nowrap; }
+        th { 
+            background: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-align: left; 
+            padding: 8px 6px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            border-bottom: 2px solid #cbd5e1; 
+            white-space: nowrap; 
+        }
         td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; }
         tr:last-child td { border-bottom: none; }
         .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
@@ -32,13 +170,13 @@
         .loading { text-align: center; padding: 20px; color: #64748b; }
         .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
         
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
         .modal.active { display: flex; }
-        .modal-content { background: white; border-radius: 12px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
         .modal-field { margin-bottom: 12px; }
         .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
-        .modal-field input { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; }
+        .modal-field input { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
         .modal-btn.save { background: #667eea; color: white; }
@@ -53,13 +191,29 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
+
+  <!-- Seitenmenü (Analog zu order.html) -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
+  </div>
+
   <div class="container">
-    <h1>📅 Stundenzettel (Laufender Monat)</h1>
+    <!-- Header-Zeile: Überschrift links, Menu-Button rechts daneben -->
+    <div class="header-row">
+      <h1>📅 Stundenzettel (Laufender Monat)</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
     
     <div class="controls">
       <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
-      <button id="exportPdfBtn" class="back-btn" style="background: #059669;" onclick="exportCurrentMonthPDF()" disabled>📄 PDF Export</button>
-      <a href="index.html" class="back-btn">← Zurück</a>
+      <button id="exportPdfBtn" class="action-btn" onclick="exportCurrentMonthPDF()" disabled>📄 PDF Export</button>
     </div>
 
     <div id="errorMsg" class="error"></div>
@@ -126,6 +280,60 @@
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
     const exportPdfBtn = document.getElementById('exportPdfBtn');
+
+    /* Seitenmenü Toggle-Logik (Analog order.html) */
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    /* Dynamische Farben aus colors.json laden mit Failsafe */
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const colors = await res.json();
+        
+        if (colors.background) {
+          document.body.style.background = colors.background;
+        } else if (colors.bgGradientStart && colors.bgGradientEnd) {
+          document.body.style.background = `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`;
+        }
+
+        // Navigations-Buttons dynamisch einfärben
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('colors.json konnte nicht geladen werden, verwende Failsafe (Schwarz/Weiß).', e);
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.style.backgroundColor = '#000000';
+          btn.style.borderColor = '#000000';
+          btn.style.color = '#ffffff';
+        });
+        openMenuBtn.style.backgroundColor = '#000000';
+        openMenuBtn.style.color = '#ffffff';
+      }
+    }
 
     function isEditable(dateKey) {
       const parts = dateKey.split('-');
@@ -699,6 +907,7 @@
     }
 
     employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
+    loadColors();
     loadStaff();
   </script>
 </body>
