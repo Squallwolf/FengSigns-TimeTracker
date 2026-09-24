@@ -137,7 +137,6 @@
         
         .storage-grid {
             display: grid;
-            /* 4 Regale (A, B, C, D) + 2 Gänge */
             grid-template-columns: 1fr 40px 1fr 1fr 40px 1fr;
             gap: 15px 0;
             min-width: 850px;
@@ -187,7 +186,7 @@
             align-items: center;
         }
 
-        /* Paletten-Proportion: Querformat (Euro-Palette 120 x 80 cm -> Verhältnis 1.5 : 1) */
+        /* Paletten-Proportion: Querformat */
         .palette-tile {
             width: 100%;
             max-width: 180px;
@@ -217,15 +216,22 @@
             color: #14532d;
         }
 
+        /* Verstäker Glow (+30% Intensität & Ausdehnung) */
         .palette-tile.highlight {
-            animation: pulse 1s infinite alternate;
-            border-color: #eab308;
-            box-shadow: 0 0 12px #fde047;
+            animation: pulseGlow 0.9s infinite alternate;
+            border-color: #f59e0b;
+            z-index: 15;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            100% { transform: scale(1.06); }
+        @keyframes pulseGlow {
+            0% { 
+                transform: scale(1);
+                box-shadow: 0 0 10px rgba(250, 204, 21, 0.7), 0 0 20px rgba(250, 204, 21, 0.4);
+            }
+            100% { 
+                transform: scale(1.08);
+                box-shadow: 0 0 20px rgba(250, 204, 21, 1), 0 0 35px rgba(245, 158, 11, 0.9);
+            }
         }
 
         .palette-header {
@@ -243,16 +249,17 @@
         .palette-qty {
             font-size: 0.7rem;
             font-weight: 700;
-            background: rgba(255, 255, 255, 0.6);
+            background: rgba(255, 255, 255, 0.7);
             padding: 1px 4px;
             border-radius: 3px;
         }
 
         .palette-info {
             font-weight: 700;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             line-height: 1.1;
             word-break: break-word;
+            white-space: pre-line;
             text-align: center;
             margin: auto 0;
             display: -webkit-box;
@@ -261,7 +268,6 @@
             overflow: hidden;
         }
 
-        /* Legend */
         .legend {
             display: flex;
             gap: 20px;
@@ -278,11 +284,21 @@
         
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
         .modal.active { display: flex; }
-        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 420px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
         .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
         .modal-field { margin-bottom: 12px; }
         .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
         .modal-field input, .modal-field select, .modal-field textarea { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
+        
+        /* Gestyltes nicht-editierbares Feld für Stellplatz ID */
+        .modal-field input[readonly] {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            font-weight: 700;
+            border-color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
         .modal-btn.save { background: #059669; color: white; }
@@ -302,14 +318,14 @@
     <h2>Menü</h2>
     <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
     <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
-    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="coupons.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
     <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
     <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
   </div>
 
   <div class="container">
     <div class="header-row">
-      <h1> Lager Fruchtfliege </h1>
+      <h1>🗺️ Lager-Map (Regal A – D)</h1>
       <button class="open-menu-btn" id="openMenuBtn">☰</button>
     </div>
     
@@ -328,7 +344,7 @@
     <div class="legend">
       <div class="legend-item"><div class="legend-box" style="background:#f1f5f9; border-color:#334155;"></div> Frei</div>
       <div class="legend-item"><div class="legend-box" style="background:#dcfce7; border-color:#16a34a;"></div> Belegt</div>
-      <div class="legend-item"><div class="legend-box" style="background:#eab308; border-color:#ca8a04;"></div> Treffer</div>
+      <div class="legend-item"><div class="legend-box" style="background:#f59e0b; border-color:#d97706; box-shadow: 0 0 6px #f59e0b;"></div> Treffer</div>
     </div>
   </div>
 
@@ -337,14 +353,16 @@
     <div class="modal-content">
       <div class="modal-header" id="modalTitle">Stellplatz bearbeiten</div>
       
+      <!-- Nicht editierbare Stellplatz ID -->
       <div class="modal-field">
-        <label>Stellplatz ID</label>
-        <input type="text" id="modalSlotId" readonly style="background:#f1f5f9;">
+        <label>Stellplatz ID (nicht änderbar)</label>
+        <input type="text" id="modalSlotId" readonly tabindex="-1">
       </div>
 
+      <!-- Mehrzeiliges Textarea für Mischplätze -->
       <div class="modal-field">
-        <label>Artikelbeschreibung / Material</label>
-        <input type="text" id="modalItem" placeholder="z. B. Kartonagen 40x40">
+        <label>Artikelbeschreibung / Material (mehrzeilig für Mischplätze)</label>
+        <textarea id="modalItem" rows="3" placeholder="z. B.&#10;Kartonagen 40x40&#10;Füllmaterial"></textarea>
       </div>
 
       <div class="modal-field">
@@ -400,21 +418,18 @@
     closeMenuBtn.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    /* Dynamische Hintergrundfarbe explizit aus Key 'lager' laden */
     async function loadColors() {
       try {
         const res = await fetch('colors.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
-        // Hintergrundfarbe spezifisch über den Key "lager" setzen
         if (colors.lager) {
           document.body.style.background = colors.lager;
         } else if (colors.background) {
           document.body.style.background = colors.background;
         }
 
-        // Farben für Menü-Buttons anwenden
         document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
           const key = btn.getAttribute('data-color-key');
           if (colors[key]) {
@@ -441,7 +456,6 @@
       }
     }
 
-    /* Lädt Belegungsdaten aus Firestore */
     async function loadStorageData() {
       try {
         const snap = await db.collection('storage').get();
@@ -456,13 +470,11 @@
       }
     }
 
-    /* Baut die Map mit 4 Spalten (Regal A, B, C, D) und 2 Gängen auf */
     function renderMap() {
       const racks = ['A', 'B', 'C', 'D'];
       let html = '';
 
       racks.forEach((rackLetter, index) => {
-        // Gang einfügen nach Regal A (Index 0) und Regal C (Index 2)
         if (index === 1) {
           html += `<div class="aisle">Gang 1</div>`;
         } else if (index === 3) {
@@ -473,7 +485,6 @@
           <div class="rack-header">Regal ${rackLetter}</div>
           <div class="palette-list">`;
 
-        // Pro Regal genau 12 Paletten-Stellplätze (einzeln untereinander im Querformat)
         for (let i = 1; i <= 12; i++) {
           const num = i < 10 ? '0' + i : i;
           const slotId = `${rackLetter}-${num}`;
