@@ -7,36 +7,50 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
-    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; }
-    h1 { text-align: center; font-size: 1.5rem; margin: 0 0 0.75rem; color: #333; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #006060; min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; position: relative; }
     
-    .top-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
-    .nav-btn { padding: 10px; border: 2px solid #667eea; background: white; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #667eea; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
-    .nav-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+    /* Header & Menü-Button (Überschrift links, Button rechts) */
+    .header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    h1 { text-align: left; font-size: 1.5rem; color: #333; margin: 0; }
+    .open-menu-btn { background: #000; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1.1rem; transition: all 0.3s ease; }
+    .open-menu-btn:hover { opacity: 0.85; }
+
+    /* Seitenmenü / Off-Canvas Overlay */
+    .menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: none; z-index: 2000; }
+    .menu-overlay.active { display: block; }
+    
+    .side-menu { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 2001; transition: left 0.3s ease; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+    .side-menu.active { left: 0; }
+    
+    .side-menu .close-btn { align-self: flex-end; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #333; }
+    .side-menu h2 { font-size: 1.2rem; margin-bottom: 10px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+    
+    .side-menu .nav-btn { padding: 12px; border: 1px solid #000; background: #000; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #fff; font-size: 0.95rem; transition: all 0.3s ease; display: block; }
+    .side-menu .nav-btn:hover { opacity: 0.85; }
 
     .form-group { margin-bottom: 0.75rem; }
     .form-group label { display: block; margin-bottom: 5px; color: #444; font-weight: 600; font-size: 0.9rem; }
     .form-group input, .form-group select { width: 100%; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
-    .form-group input:focus, .form-group select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+    .form-group input:focus, .form-group select:focus { outline: none; border-color: #333; background: white; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1); }
 
     .row { display: grid; grid-template-columns: 1.5fr 1fr; gap: 10px; margin-bottom: 0.75rem; }
     .row .form-group { margin-bottom: 0; }
 
     .autocomplete-container { position: relative; }
-    .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #667eea; border-top: none; border-radius: 0 0 10px 10px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); display: none; }
+    .autocomplete-list { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 2px solid #333; border-top: none; border-radius: 0 0 10px 10px; max-height: 200px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1); display: none; }
     .autocomplete-list.active { display: block; }
     .autocomplete-list::-webkit-scrollbar { width: 12px; }
     .autocomplete-list::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 6px; }
-    .autocomplete-list::-webkit-scrollbar-thumb { background: #667eea; border-radius: 6px; border: 3px solid #f1f1f1; }
+    .autocomplete-list::-webkit-scrollbar-thumb { background: #333; border-radius: 6px; border: 3px solid #f1f1f1; }
     .autocomplete-item { padding: 12px 15px; cursor: pointer; transition: background 0.2s ease; border-bottom: 1px solid #f0f0f0; }
     .autocomplete-item:last-child { border-bottom: none; }
-    .autocomplete-item:hover { background: #e8ebf9; }
-    .autocomplete-item .article-number { font-weight: 600; color: #667eea; font-size: 0.85rem; }
+    .autocomplete-item:hover { background: #f0f0f0; }
+    .autocomplete-item .article-number { font-weight: 600; color: #333; font-size: 0.85rem; }
     .autocomplete-item .product-name { overflow-wrap: break-word; word-wrap: break-word; word-break: break-word; hyphens: auto; color: #666; font-size: 14px; }
 
-    .btn-primary { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; transition: all 0.3s ease; width: 100%; }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
+    .btn-primary { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; background: #333; color: #fff; transition: all 0.3s ease; width: 100%; }
+    .btn-primary:hover { transform: translateY(-2px); opacity: 0.9; }
     .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
     
     .btn-export { padding: 10px 16px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #059669; background: white; color: #059669; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.3s ease; margin-top: 1rem; }
@@ -59,18 +73,28 @@
     
     @media (max-width: 500px) { 
       .container { padding: 15px; } 
-      .top-bar { grid-template-columns: 1fr; } 
       .row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
+
+  <!-- Seitenmenü in festgelegter Reihenfolge -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
+    <a href="timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
+  </div>
+
   <div class="container">
-    <h1>📋 Inventur</h1>
-    
-    <div class="top-bar">
-      <a href="index.html" class="nav-btn">⏱️ Zeiterfassung</a>
-      <a href="order.html" class="nav-btn">📦 Bestellung</a>
+    <div class="header-bar">
+      <h1>Inventur</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
     </div>
 
     <div class="form-group">
@@ -144,13 +168,72 @@
           </tbody>
         </table>
       </div>
-      <button id="exportBtn" class="btn-export">📥 Als Excel exportieren</button>
+      <button id="exportBtn" class="btn-export">Als Excel exportieren</button>
     </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script>
+    // === SEITENMENÜ TOGGLE LOGIK ===
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    // === DYNAMISCHE FARBEN LADEFUNKTION MIT FAILSAFE ===
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
+        const colors = await res.json();
+        
+        // Hintergrundfarbe für Inventur setzen
+        if (colors.inventur) {
+          document.body.style.backgroundColor = colors.inventur;
+        }
+
+        // Navigations-Buttons dynamisch färben
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
+        
+        // FAILSAFE: Schwarz & Weiß
+        document.body.style.backgroundColor = '#ffffff';
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.style.backgroundColor = '#000000';
+          btn.style.borderColor = '#000000';
+          btn.style.color = '#ffffff';
+        });
+
+        openMenuBtn.style.backgroundColor = '#000000';
+        openMenuBtn.style.color = '#ffffff';
+      }
+    }
+    loadColors();
+
     const showError = (msg) => { 
       const el = document.getElementById('errorMsg'); 
       el.textContent = msg; 
@@ -365,7 +448,7 @@
     addBtn.addEventListener('click', async () => {
       const pw = document.getElementById('password').value;
       if (!checkPassword(currentUser, pw)) {
-        showError('❌ Sitzung abgelaufen oder falsches Passwort.');
+        showError('Sitzung abgelaufen oder falsches Passwort.');
         return;
       }
 
@@ -397,7 +480,7 @@
           timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         
-        showSuccess('✅ Eintrag erfolgreich gespeichert.');
+        showSuccess('Eintrag erfolgreich gespeichert.');
         document.getElementById('itemName').value = '';
         document.getElementById('articleNumber').value = '';
         document.getElementById('quantity').value = '';
@@ -466,12 +549,12 @@
         XLSX.utils.book_append_sheet(wb, ws, "Inventur");
         XLSX.writeFile(wb, filename);
         
-        showSuccess('✅ Excel-Datei heruntergeladen.');
+        showSuccess('Excel-Datei heruntergeladen.');
       } catch(e) {
         showError('Export-Fehler: ' + e.message);
       } finally {
         exportBtn.disabled = false;
-        exportBtn.textContent = '📥 Als Excel exportieren';
+        exportBtn.textContent = 'Als Excel exportieren';
       }
     });
   </script>
