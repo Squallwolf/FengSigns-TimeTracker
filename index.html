@@ -9,31 +9,54 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
-    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 420px; width: 100%; margin: 10px 0; }
-    h1 { text-align: center; font-size: 1.5rem; margin: 0 0 0.75rem; color: #333; }
     
-    /* === NEUES 2x2 GRID FÜR PERFEKTE AUSRICHTUNG === */
-    .top-bar { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
-    .nav-btn { padding: 10px; border: 2px solid #667eea; background: white; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #667eea; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; white-space: nowrap; }
-    .nav-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+    /* Fallback-Hintergrund, wird durch colors.json überschrieben */
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #008080; min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
+    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 420px; width: 100%; margin: 10px 0; position: relative; }
     
-    .nav-btn.current-month { border-color: #059669; color: #059669; }
-    .nav-btn.current-month:hover { background: #059669; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+    /* === HEADER & MENU BUTTON === */
+    .header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    h1 { font-size: 1.5rem; color: #333; margin: 0; }
+    .menu-toggle { background: #667eea; color: white; border: none; outline: none; font-size: 1.2rem; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s ease; }
+    .menu-toggle:hover { background: #5a67d8; }
+
+    /* === SIDE MENU & OVERLAY === */
+    .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.4); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 998; }
+    .sidebar-overlay.active { opacity: 1; visibility: visible; }
     
-    .export-wrapper { position: relative; width: 100%; height: 100%; }
-    .export-btn { width: 100%; height: 100%; padding: 10px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.3s ease; }
-    .export-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3); }
+    .sidebar { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: #ffffff; box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2); z-index: 999; transition: left 0.3s ease; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    .sidebar.open { left: 0; }
     
-    .export-arrow { margin-left: 8px; font-size: 0.7rem; transition: transform 0.2s; padding: 4px; }
+    .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
+    .sidebar-header h2 { font-size: 1.2rem; color: #333; }
+    .close-menu { background: transparent; border: none; font-size: 1.5rem; cursor: pointer; color: #888; }
+    .close-menu:hover { color: #333; }
+
+    /* Dynamische Navigations-Buttons */
+    .nav-btn { padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; font-size: 0.95rem; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; width: 100%; color: #ffffff; }
+    .nav-btn:hover { transform: translateY(-1px); filter: brightness(0.95); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); }
+
+    /* Export Grid (Page Level) */
+    .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .export-wrapper { position: relative; width: 100%; }
+    .export-btn { width: 100%; padding: 10px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease; }
+    .export-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2); }
+    
+    .export-btn.current-month { border-color: #059669; color: #059669; }
+    .export-btn.current-month:hover { background: #059669; color: white; box-shadow: 0 4px 8px rgba(5, 150, 105, 0.2); }
+
+    .export-arrow { margin-left: 4px; font-size: 0.7rem; transition: transform 0.2s; padding: 2px; }
     .export-arrow.open { transform: rotate(180deg); }
     .export-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 2px solid #667eea; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; display: none; }
+    .export-dropdown.current-month-dropdown { border-color: #059669; }
     .export-dropdown.show { display: block; }
-    .export-option { padding: 10px 14px; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #eee; transition: background 0.2s; }
+    .export-option { padding: 10px 14px; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid #eee; transition: background 0.2s; }
     .export-option:last-child { border-bottom: none; }
     .export-option:hover { background: #e8ebf9; }
+    .export-dropdown.current-month-dropdown .export-option:hover { background: #e6f4ea; }
     .export-option.active { background: #667eea; color: #fff; font-weight: 600; }
-    
+    .export-dropdown.current-month-dropdown .export-option.active { background: #059669; color: #fff; }
+
     .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
     .row label { margin: 0; white-space: nowrap; font-weight: 600; font-size: 0.9rem; color: #444; }
     .row select { flex: 1; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
@@ -62,24 +85,52 @@
     
     @media (max-width: 500px) { 
       .container { padding: 15px; } 
-      .top-bar { grid-template-columns: 1fr; } /* Untereinander auf sehr kleinen Bildschirmen */
+      .export-grid { grid-template-columns: 1fr; }
       .row { flex-wrap: wrap; } 
       .row label { width: 100%; margin-bottom: 0.25rem; } 
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>⏱️ Zeiterfassung</h1>
+
+  <!-- Overlay Backdrop -->
+  <div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+  <!-- Side Navigation Menu -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <h2>Navigation</h2>
+      <button id="closeMenuBtn" class="close-menu">&times;</button>
+    </div>
     
-    <!-- 2x2 Grid für perfekte Symmetrie -->
-    <div class="top-bar">
-      <a href="https://squallwolf.github.io/FengSigns-TimeTracker/order.html" class="nav-btn">📦 Bestellung</a>
-      <a href="https://squallwolf.github.io/FengSigns-TimeTracker/inventory.html" class="nav-btn">📋 Inventur</a>
-      <a href="https://squallwolf.github.io/FengSigns-TimeTracker/timesheet.html" class="nav-btn">📋 Time Sheet</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="coupons.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
+    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
+  </aside>
+
+  <div class="container">
+    <div class="header-bar">
+      <h1>Zeiterfassung</h1>
+      <button id="openMenuBtn" class="menu-toggle" aria-label="Navigation öffnen">☰</button>
+    </div>
+
+    <!-- Export Buttons On Main Page -->
+    <div class="export-grid">
+      <!-- Export: Letzter Monat -->
       <div class="export-wrapper">
         <button id="exportBtn" class="export-btn"><span>Letzter Monat</span><span class="export-arrow" id="exportArrow">▼</span></button>
         <div class="export-dropdown" id="exportDropdown">
+          <div class="export-option active" data-format="pdf">PDF (Standard)</div>
+          <div class="export-option" data-format="excel">Excel (.xlsx)</div>
+        </div>
+      </div>
+
+      <!-- Export: Dieser Monat -->
+      <div class="export-wrapper">
+        <button id="exportCurrentBtn" class="export-btn current-month"><span>Dieser Monat</span><span class="export-arrow" id="exportCurrentArrow">▼</span></button>
+        <div class="export-dropdown current-month-dropdown" id="exportCurrentDropdown">
           <div class="export-option active" data-format="pdf">PDF (Standard)</div>
           <div class="export-option" data-format="excel">Excel (.xlsx)</div>
         </div>
@@ -102,13 +153,55 @@
     <div id="debug"></div>
   </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script>
     const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
     const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; };
     const showWarning = (msg) => { const el = document.getElementById('warningMsg'); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); };
+    // === DYNAMISCHE FARBEN LADEFUNKTION MIT FAILSAFE ===
+async function loadColors() {
+  try {
+    const res = await fetch('colors.json');
+    if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
+    const colors = await res.json();
     
+    // Haupt-Hintergrundfarbe setzen
+    if (colors.zeiterfassung) {
+      document.body.style.backgroundColor = colors.zeiterfassung;
+    }
+
+    // Navigations-Buttons mit passenden Farben dynamisch färben
+    document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+      const key = btn.getAttribute('data-color-key');
+      if (colors[key]) {
+        btn.style.backgroundColor = colors[key];
+        btn.style.color = '#ffffff';
+      }
+    });
+  } catch (e) {
+    console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
+    
+    // === FAILSAFE: SCHWARZ & WEISS ===
+    document.body.style.backgroundColor = '#ffffff';
+
+    // Alle Navigations-Buttons auf Schwarz/Weiß setzen
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+      btn.style.backgroundColor = '#000000';
+      btn.style.color = '#ffffff';
+      btn.style.border = '1px solid #000000';
+    });
+
+    // Optional: Auch den Menü-Toggle-Button auf Schwarz/Weiß anpassen
+    const menuToggle = document.getElementById('openMenuBtn');
+    if (menuToggle) {
+      menuToggle.style.backgroundColor = '#000000';
+      menuToggle.style.color = '#ffffff';
+    }
+  }
+}
+loadColors();
+
     const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
     firebase.initializeApp(firebaseConfig); 
     const db = firebase.firestore(); 
@@ -122,14 +215,43 @@
     const warningMsg = document.getElementById('warningMsg');
     const list = document.getElementById('entryList');
     const rangeFilter = document.getElementById('rangeFilter');
+    
+    // Export Elements: Letzter Monat
     const exportBtn = document.getElementById('exportBtn');
     const exportArrow = document.getElementById('exportArrow');
     const exportDropdown = document.getElementById('exportDropdown');
-    const exportOptions = document.querySelectorAll('.export-option');
-    
+    const exportOptions = exportDropdown.querySelectorAll('.export-option');
+
+    // Export Elements: Dieser Monat
+    const exportCurrentBtn = document.getElementById('exportCurrentBtn');
+    const exportCurrentArrow = document.getElementById('exportCurrentArrow');
+    const exportCurrentDropdown = document.getElementById('exportCurrentDropdown');
+    const exportCurrentOptions = exportCurrentDropdown.querySelectorAll('.export-option');
+
+    // === SIDE MENU CONTROLS ===
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOverlay = document.getElementById('sidebarOverlay');
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+
+    function openSidebar() {
+      sidebar.classList.add('open');
+      sidebarOverlay.classList.add('active');
+    }
+
+    function closeSidebar() {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openSidebar);
+    closeMenuBtn.addEventListener('click', closeSidebar);
+    sidebarOverlay.addEventListener('click', closeSidebar);
+
     let user = localStorage.getItem('tz_user') || '';
     let allEntries = [];
     let selectedFormat = 'pdf';
+    let selectedCurrentFormat = 'pdf';
     const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
     
     // === STAFF / PASSWORD ===
@@ -181,11 +303,19 @@
     
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
     
-    // === EXPORT DROPDOWN ===
-    exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); });
+    // === EXPORT DROPDOWNS SETUP ===
+    exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); });
     exportBtn.addEventListener('click', (e) => { if (e.target !== exportArrow) exportData(selectedFormat); });
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
-    document.addEventListener('click', (e) => { if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); } });
+
+    exportCurrentArrow.addEventListener('click', (e) => { e.stopPropagation(); exportCurrentDropdown.classList.toggle('show'); exportCurrentArrow.classList.toggle('open'); exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); });
+    exportCurrentBtn.addEventListener('click', (e) => { if (e.target !== exportCurrentArrow) exportCurrentMonthData(selectedCurrentFormat); });
+    exportCurrentOptions.forEach(opt => { opt.addEventListener('click', () => { exportCurrentOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedCurrentFormat = opt.dataset.format; exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }); });
+
+    document.addEventListener('click', (e) => { 
+      if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }
+      if (!exportCurrentBtn.contains(e.target) && !exportCurrentDropdown.contains(e.target)) { exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }
+    });
     
     // === HELPERS ===
     function toDateSafe(val) {
@@ -392,11 +522,10 @@
       exportBtn.disabled = false; exportBtn.querySelector('span').textContent = 'Letzter Monat';
     }
 
-    // === EXPORT (LAUFENDER MONAT) ===
+    // === EXPORT (DIESER MONAT) ===
     async function exportCurrentMonthData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      const currentBtn = document.getElementById('currentMonthBtn');
-      currentBtn.disabled = true; currentBtn.textContent = 'Erstelle...';
+      exportCurrentBtn.disabled = true; exportCurrentBtn.querySelector('span').textContent = 'Erstelle...';
       try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -433,10 +562,17 @@
           doc.autoTable({ startY: 35, head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], body: tableData, theme: 'grid', headStyles: { fillColor: [5, 150, 105] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, didDrawPage: function(data) { if (data.pageNumber === doc.internal.getNumberOfPages()) { const finalY = data.cursor.y + 10; doc.setLineWidth(0.5); doc.line(14, finalY, 90, finalY); doc.line(100, finalY, 180, finalY); doc.setFontSize(9); doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); } } });
           await new Promise(resolve => setTimeout(resolve, 100));
           const filename = `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; doc.save(filename);
+        } else if(format === 'excel') {
+          const wb = XLSX.utils.book_new();
+          const wsData = [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis'], ...tableData];
+          const ws = XLSX.utils.aoa_to_sheet(wsData); ws['!cols'] = [{wch:12}, {wch:10}, {wch:10}, {wch:10}, {wch:12}, {wch:20}];
+          XLSX.utils.book_append_sheet(wb, ws, "Zeiten"); XLSX.writeFile(wb, `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.xlsx`);
         }
       } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
-      currentBtn.disabled = false; currentBtn.textContent = '📊 Laufender Monat';
+      exportCurrentBtn.disabled = false; exportCurrentBtn.querySelector('span').textContent = 'Dieser Monat';
     }
   </script>
 </body>
 </html>
+
+```
