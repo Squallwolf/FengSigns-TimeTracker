@@ -301,13 +301,14 @@
     closeMenuBtn.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    /* Dynamische Farben aus colors.json laden mit Failsafe */
+    /* Dynamische Farben & Hintergrund aus colors.json laden */
     async function loadColors() {
       try {
         const res = await fetch('colors.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
+        // Dynamischer Hintergrund für body
         if (colors.background) {
           document.body.style.background = colors.background;
         } else if (colors.bgGradientStart && colors.bgGradientEnd) {
@@ -324,7 +325,7 @@
           }
         });
       } catch (e) {
-        console.warn('colors.json konnte nicht geladen werden, verwende Failsafe (Schwarz/Weiß).', e);
+        console.warn('colors.json konnte nicht geladen werden, verwende Failsafe.', e);
         document.querySelectorAll('.nav-btn').forEach(btn => {
           btn.style.backgroundColor = '#000000';
           btn.style.borderColor = '#000000';
