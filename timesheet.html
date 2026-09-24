@@ -56,7 +56,7 @@
         }
         .open-menu-btn:hover { opacity: 0.85; }
 
-        /* Seitenmenü / Off-Canvas Overlay (analog order.html) */
+        /* Seitenmenü / Off-Canvas Overlay */
         .menu-overlay { 
             position: fixed; 
             top: 0; 
@@ -192,7 +192,7 @@
 </head>
 <body>
 
-  <!-- Seitenmenü (Analog zu order.html) -->
+  <!-- Seitenmenü -->
   <div class="menu-overlay" id="menuOverlay"></div>
   <div class="side-menu" id="sideMenu">
     <button class="close-btn" id="closeMenuBtn">&times;</button>
@@ -201,7 +201,7 @@
     <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
     <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
     <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
-    <a href="timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
   </div>
 
   <div class="container">
@@ -281,7 +281,7 @@
     const errorMsg = document.getElementById('errorMsg');
     const exportPdfBtn = document.getElementById('exportPdfBtn');
 
-    /* Seitenmenü Toggle-Logik (Analog order.html) */
+    /* Seitenmenü Toggle-Logik */
     const openMenuBtn = document.getElementById('openMenuBtn');
     const closeMenuBtn = document.getElementById('closeMenuBtn');
     const sideMenu = document.getElementById('sideMenu');
@@ -308,8 +308,10 @@
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
-        // Dynamischer Hintergrund für body
-        if (colors.background) {
+        // Dynamischer Hintergrund für body über den Key 'timesheet'
+        if (colors.timesheet) {
+          document.body.style.background = colors.timesheet;
+        } else if (colors.background) {
           document.body.style.background = colors.background;
         } else if (colors.bgGradientStart && colors.bgGradientEnd) {
           document.body.style.background = `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`;
