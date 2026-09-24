@@ -118,6 +118,14 @@
         }
         .side-menu .nav-btn:hover { opacity: 0.85; }
 
+        /* Form-Style für Login */
+        .form-group { margin-bottom: 0.75rem; }
+        .form-group label { display: block; margin-bottom: 5px; color: #444; font-weight: 600; font-size: 0.9rem; }
+        .form-group input, .form-group select { width: 100%; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
+        .form-group input:focus, .form-group select:focus { outline: none; border-color: #333; background: white; box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1); }
+
+        #status { text-align: center; margin: 0.5rem 0 1rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
+
         .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
         .search-input { 
             flex: 1; 
@@ -194,25 +202,41 @@
     <h2>Menü</h2>
     <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
     <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
-    <a href="coupons.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
     <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
     <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
   </div>
 
   <div class="container">
     <div class="header-row">
-      <h1>Gutscheine (im Aufbau)</h1>
+      <h1>Gutscheine</h1>
       <button class="open-menu-btn" id="openMenuBtn">☰</button>
     </div>
     
-    <div class="controls">
-      <input type="text" id="searchInput" class="search-input" placeholder="🔍 Code oder Rechnung suchen..." oninput="filterCoupons()">
-      <button class="action-btn" onclick="openAddModal()">➕ Neuer Gutschein</button>
+    <!-- Mitarbeiter & Passwort Login -->
+    <div class="form-group">
+      <label for="employee">Mitarbeiter:</label>
+      <select id="employee"><option value="">-- Bitte wählen --</option></select>
+    </div>
+    
+    <div class="form-group" id="passwordRow">
+      <label for="password">Passwort:</label>
+      <input type="password" id="password" placeholder="••••••">
     </div>
 
+    <div id="status">Bitte Mitarbeiter wählen</div>
     <div id="errorMsg" class="error"></div>
-    <div id="tableContainer" class="table-wrapper">
-      <div class="loading">Lade Gutscheine...</div>
+
+    <!-- Geschützter Bereich (Anfangs versteckt) -->
+    <div id="protectedContent" style="display: none;">
+      <div class="controls">
+        <input type="text" id="searchInput" class="search-input" placeholder="🔍 Code oder Rechnung suchen..." oninput="filterCoupons()">
+        <button class="action-btn" onclick="openAddModal()">➕ Neuer Gutschein</button>
+      </div>
+
+      <div id="tableContainer" class="table-wrapper">
+        <div class="loading">Lade Gutscheine...</div>
+      </div>
     </div>
   </div>
 
@@ -241,16 +265,6 @@
         <input type="number" step="0.01" id="modalCurrentValue" placeholder="6.00">
       </div>
 
-      <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
-        <label>Mitarbeiter</label>
-        <select id="modalStaffSelect"><option value="">-- Wählen --</option></select>
-      </div>
-
-      <div class="modal-field">
-        <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
-        <input type="password" id="modalPassword" placeholder="••••••" style="border-color: #fca5a5;">
-      </div>
-
       <div class="modal-buttons">
         <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
         <button class="modal-btn save" onclick="saveCoupon()">Speichern</button>
@@ -266,7 +280,11 @@
     let staffDB = {};
     let allCoupons = [];
     let currentEditId = null;
+    let currentUser = localStorage.getItem('vouchers_user') || '';
 
+    const sel = document.getElementById('employee');
+    const status = document.getElementById('status');
+    const protectedContent = document.getElementById('protectedContent');
     const tableContainer = document.getElementById('tableContainer');
     const errorMsg = document.getElementById('errorMsg');
 
@@ -283,7 +301,7 @@
     closeMenuBtn.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    /* Dynamische Farben aus colors.json laden (Nutzt 'gutscheine' Key für BG) */
+    /* Dynamische Farben aus colors.json laden */
     async function loadColors() {
       try {
         const res = await fetch('colors.json');
@@ -314,13 +332,64 @@
         const res = await fetch('staff.json');
         if (!res.ok) throw new Error('HTTP ' + res.status);
         staffDB = await res.json();
-        const select = document.getElementById('modalStaffSelect');
-        select.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + 
-          Object.keys(staffDB).map(n => `<option value="${n}">${n}</option>`).join('');
+        const names = Object.keys(staffDB).sort((a, b) => a.localeCompare(b, 'de'));
+        sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
+          names.map(n => `<option value="${n}">${n}</option>`).join('');
+
+        if (currentUser && staffDB[currentUser]) {
+          sel.value = currentUser;
+          handleUserChange();
+        } else {
+          currentUser = '';
+          localStorage.removeItem('vouchers_user');
+        }
       } catch (e) {
         console.error('Mitarbeiter-Daten nicht ladbar', e);
+        showError('Mitarbeiter-Daten nicht ladbar.');
       }
     }
+
+    function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
+
+    sel.addEventListener('change', handleUserChange);
+
+    function handleUserChange() {
+      currentUser = sel.value;
+      if (currentUser) {
+        localStorage.setItem('vouchers_user', currentUser);
+      } else {
+        localStorage.removeItem('vouchers_user');
+      }
+      document.getElementById('password').value = '';
+      
+      if (currentUser) {
+        status.textContent = 'Bitte Passwort eingeben';
+        status.style.color = '#4b5563';
+        protectedContent.style.display = 'none';
+      } else {
+        status.textContent = 'Bitte Mitarbeiter wählen';
+        status.style.color = '#4b5563';
+        protectedContent.style.display = 'none';
+      }
+    }
+
+    document.getElementById('password').addEventListener('input', async (e) => {
+      const pw = e.target.value;
+      if (currentUser && checkPassword(currentUser, pw)) {
+        status.textContent = 'Angemeldet als ' + currentUser;
+        status.style.color = '#059669';
+        protectedContent.style.display = 'block';
+        await loadCoupons();
+      } else if (currentUser && pw.length > 0) {
+        status.textContent = 'Falsches Passwort';
+        status.style.color = '#dc2626';
+        protectedContent.style.display = 'none';
+      } else {
+        status.textContent = 'Bitte Passwort eingeben';
+        status.style.color = '#4b5563';
+        protectedContent.style.display = 'none';
+      }
+    });
 
     function fmtEuro(val) {
       const num = parseFloat(val) || 0;
@@ -391,9 +460,7 @@
       document.getElementById('modalInvoice').value = '';
       document.getElementById('modalPurchaseValue').value = '';
       document.getElementById('modalCurrentValue').value = '';
-      document.getElementById('modalPassword').value = '';
       
-      // Bei Neuanlage den aktuellen Wert automatisch an den Kaufwert anpassen
       document.getElementById('modalPurchaseValue').oninput = (e) => {
         if(!currentEditId) {
           document.getElementById('modalCurrentValue').value = e.target.value;
@@ -413,7 +480,6 @@
       document.getElementById('modalInvoice').value = coupon.invoiceRef || '';
       document.getElementById('modalPurchaseValue').value = coupon.purchaseValue || '';
       document.getElementById('modalCurrentValue').value = coupon.currentValue || '';
-      document.getElementById('modalPassword').value = '';
       document.getElementById('modalPurchaseValue').oninput = null;
 
       document.getElementById('couponModal').classList.add('active');
@@ -425,20 +491,19 @@
     }
 
     async function saveCoupon() {
+      const pw = document.getElementById('password').value;
+      if (!checkPassword(currentUser, pw)) {
+        alert('❌ Passwort ungültig oder Sitzung abgelaufen.');
+        return;
+      }
+
       const code = document.getElementById('modalCode').value.trim();
       const invoiceRef = document.getElementById('modalInvoice').value.trim();
       const purchaseValue = parseFloat(document.getElementById('modalPurchaseValue').value) || 0;
       const currentValue = parseFloat(document.getElementById('modalCurrentValue').value) || 0;
-      const staffUser = document.getElementById('modalStaffSelect').value;
-      const password = document.getElementById('modalPassword').value;
 
       if (!code) {
         alert('Bitte einen Gutschein-Code eingeben.');
-        return;
-      }
-
-      if (!staffUser || !staffDB[staffUser] || staffDB[staffUser] !== password) {
-        alert('❌ Falsches Passwort oder kein Mitarbeiter ausgewählt.');
         return;
       }
 
@@ -447,7 +512,7 @@
         invoiceRef: invoiceRef,
         purchaseValue: purchaseValue,
         currentValue: currentValue,
-        updatedBy: staffUser,
+        updatedBy: currentUser,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       };
 
@@ -475,7 +540,6 @@
 
     loadColors();
     loadStaff();
-    loadCoupons();
   </script>
 </body>
 </html>
