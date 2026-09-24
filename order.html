@@ -24,9 +24,28 @@
             transform: scale(0.98); 
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #006060 0%, #096969 100%); min-height: 100vh; padding: 10px; overflow-x: hidden; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
-        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; }
-        h1, h2 { color: #333; margin-bottom: 5px; font-size: 24px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #006060; min-height: 100vh; padding: 10px; overflow-x: hidden; width: 100%; display: flex; justify-content: center; align-items: flex-start; }
+        .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 600px; width: 100%; margin: 10px 0; position: relative; }
+        
+        /* Header & Menü-Button */
+        .header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+        h1 { color: #333; margin: 0; font-size: 24px; text-align: left; }
+        .open-menu-btn { background: #000; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 1.1rem; transition: all 0.3s ease; }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        /* Seitenmenü / Off-Canvas Overlay */
+        .menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: none; z-index: 2000; }
+        .menu-overlay.active { display: block; }
+        
+        .side-menu { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: white; box-shadow: 2px 0 10px rgba(0,0,0,0.2); z-index: 2001; transition: left 0.3s ease; padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { align-self: flex-end; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #333; }
+        .side-menu h2 { font-size: 1.2rem; margin-bottom: 10px; color: #333; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        
+        .side-menu .nav-btn { padding: 12px; border: 1px solid #000; background: #000; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; color: #fff; font-size: 0.95rem; transition: all 0.3s ease; display: block; }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
         .subtitle { color: #666; margin-bottom: 20px; font-size: 13px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; color: #444; font-weight: 600; font-size: 13px; }
@@ -71,8 +90,24 @@
     </style>
 </head>
 <body>
+
+  <!-- Seitenmenü (Reihenfolge: Zeiterfassung - Lager - Gutscheine - Inventur - Time Sheet) -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
+  </div>
+
   <div class="container">
-    <h1>📦 Lager Bestellung</h1>
+    <div class="header-bar">
+      <h1>📦 Lager Bestellung</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
     <p class="subtitle">Artikel aktualisiert: 25.05.26</p>
     <div id="successMessage" class="success-message">✓ Bestellung erfolgreich übermittelt!</div>
     <div id="errorMessage" style="display: none; background: #f44336; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; text-align: center; font-weight: 600;"></div>
@@ -89,7 +124,6 @@
     
     <div style="display: flex; gap: 10px; margin-top: 20px; justify-content: flex-start;">
         <button id="toggleUsedBtn" style="padding: 8px 12px; font-size: 18px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" title="Fehlende Artikel anzeigen">🚫</button>
-        <a id="toTimeTrackerBtn" href="index.html" title="Zurück zur Zeiterfassung" style="display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:18px;border-radius:50%;background:white;box-shadow:0 2px 6px rgba(0,0,0,0.2);cursor:pointer;border:none;text-decoration:none;color:#333;width:44px;height:44px;">⏱️</a>
         <button id="cleanupBtn" style="padding: 8px 12px; font-size: 18px; border-radius: 50%; background: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); cursor: pointer; border: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;" title="Erledigte Bestellungen löschen">🗑️</button>
     </div>
 
@@ -112,6 +146,65 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script>
+    // === SEITENMENÜ TOGGLE LOGIK ===
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    // === DYNAMISCHE FARBEN LADEFUNKTION MIT FAILSAFE ===
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
+        const colors = await res.json();
+        
+        // Hintergrundfarbe für Bestellung setzen
+        if (colors.bestellung) {
+          document.body.style.backgroundColor = colors.bestellung;
+        }
+
+        // Navigations-Buttons dynamisch färben
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
+        
+        // FAILSAFE: Schwarz & Weiß
+        document.body.style.backgroundColor = '#ffffff';
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.style.backgroundColor = '#000000';
+          btn.style.borderColor = '#000000';
+          btn.style.color = '#ffffff';
+        });
+
+        openMenuBtn.style.backgroundColor = '#000000';
+        openMenuBtn.style.color = '#ffffff';
+      }
+    }
+    loadColors();
+
     const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
     firebase.initializeApp(firebaseConfig); 
     const db = firebase.firestore(); 
@@ -490,8 +583,6 @@
         // 1. HTML-Tabelle erstellen und ins DOM einfügen
         const tempDiv = document.createElement('div');
         tempDiv.id = 'pdf-export-temp';
-        // WICHTIG: Element MUSS im sichtbaren Bereich sein, damit html2canvas es rendert.
-        // z-index: -1 und pointer-events: none, damit es für Nutzer unsichtbar ist.
         tempDiv.style.cssText = `
             position: fixed;
             top: 0;
@@ -544,48 +635,39 @@
         document.body.appendChild(tempDiv);
 
         try {
-            // 2. html2canvas DIREKT aufrufen (nicht über doc.html)
-            // Kleine Verzögerung, damit der Browser Zeit hat, das Element zu rendern
             await new Promise(resolve => setTimeout(resolve, 20));
             
             const canvas = await html2canvas(tempDiv, {
-                scale: 2, // Höhere Qualität
+                scale: 2,
                 backgroundColor: '#ffffff',
                 useCORS: true,
                 logging: false
             });
 
-            // 3. Canvas in jsPDF einfügen
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('p', 'mm', 'a4');
             
-            const pageWidth = 210;  // A4 Breite in mm
-            const pageHeight = 297; // A4 Höhe in mm
+            const pageWidth = 210;
+            const pageHeight = 297;
             const margin = 10;
             const usableWidth = pageWidth - (2 * margin);
             const usableHeight = pageHeight - (2 * margin);
             
-            // Bild-Dimensionen berechnen
             const imgWidth = usableWidth;
             const imgHeight = (canvas.height * imgWidth) / canvas.width;
-            // Wenn das Bild auf eine Seite passt
+
             if (imgHeight <= usableHeight) {
                 doc.addImage(canvas.toDataURL('image/png'), 'PNG', margin, margin, imgWidth, imgHeight);
             } else {
-                // Mehrseitiges PDF: Canvas in Slices schneiden, aber NUR an Zeilengrenzen (tr), um Textabschnitte zu vermeiden
-                
-                // 1. Y-Positionen aller Tabellenzeilen relativ zum tempDiv erfassen und mit dem html2canvas Scale-Faktor (2) multiplizieren
                 const tempDivRect = tempDiv.getBoundingClientRect();
                 const rows = tempDiv.querySelectorAll('tr');
                 const rowOffsets = [];
                 
                 rows.forEach(row => {
                     const rect = row.getBoundingClientRect();
-                    // 2 ist der Scale-Faktor aus dem html2canvas-Aufruf weiter oben
                     const scaledY = Math.round((rect.top - tempDivRect.top) * 2); 
                     rowOffsets.push(scaledY);
                 });
-                // Gesamthöhe als letzte Grenze hinzufügen
                 rowOffsets.push(canvas.height);
                 
                 const canvasWidthPx = canvas.width;
@@ -599,20 +681,17 @@
                     if (pageNumber > 0) doc.addPage();
                     
                     let sliceY = canvas.height;
-                    // Finde die letzte Zeile, die noch vollständig auf die aktuelle Seite passt
                     for (let i = 0; i < rowOffsets.length; i++) {
                         if (rowOffsets[i] > currentPosition + maxPixelsPerPage) {
                             if (i > 0) {
                                 sliceY = rowOffsets[i - 1];
                             } else {
-                                // Fallback, falls eine einzelne Zeile höher als eine ganze Seite ist (sehr unwahrscheinlich)
                                 sliceY = currentPosition + maxPixelsPerPage;
                             }
                             break;
                         }
                     }
                     
-                    // Sicherheitscheck, um Endlosschleifen zu vermeiden
                     if (sliceY <= currentPosition) {
                         sliceY = currentPosition + maxPixelsPerPage;
                     }
@@ -644,7 +723,6 @@
                 }
             }
 
-            // 4. PDF speichern
             const dateStr = new Date().toLocaleDateString('de-DE').replace(/\./g, '-');
             const fileName = currentSupplierFilter === 'all' 
                 ? `Bestellliste_Alle_${dateStr}.pdf` 
@@ -656,7 +734,6 @@
             console.error('Fehler beim PDF-Export:', error);
             alert('Fehler beim Erstellen der PDF: ' + error.message);
         } finally {
-            // 5. Aufräumen
             if (document.body.contains(tempDiv)) {
                 document.body.removeChild(tempDiv);
             }
@@ -664,7 +741,6 @@
             exportPdfBtn.textContent = '📄 PDF exportieren';
         }
     });
-    // -------------------------------------------------------------
 
     document.getElementById('ordersList').addEventListener('click', async (e) => { 
         const orderId = e.target.closest('[data-id]')?.dataset.id; 
