@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <title>Lager - Pseudo Map</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #006060 0%, #096969 100%); 
+            min-height: 100vh; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
+
+        .container { 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
+            padding: 20px; 
+            max-width: 1100px; 
+            width: 100%; 
+            margin: 20px 0 10px 0; 
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h1 { 
+            text-align: left; 
+            font-size: 1.4rem; 
+            color: #333; 
+            margin: 0;
+        }
+
+        .open-menu-btn { 
+            background: #000; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease; 
+        }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        /* Seitenmenü / Off-Canvas Overlay */
+        .menu-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            display: none; 
+            z-index: 2000; 
+        }
+        .menu-overlay.active { display: block; }
+        
+        .side-menu { 
+            position: fixed; 
+            top: 0; 
+            left: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); 
+            z-index: 2001; 
+            transition: left 0.3s ease; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            overflow-y: auto; 
+        }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { 
+            align-self: flex-end; 
+            background: none; 
+            border: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: #333; 
+        }
+        .side-menu h2 { 
+            font-size: 1.2rem; 
+            margin-bottom: 10px; 
+            color: #333; 
+            border-bottom: 2px solid #eee; 
+            padding-bottom: 5px; 
+        }
+        
+        .side-menu .nav-btn { 
+            padding: 12px; 
+            border: 1px solid #000; 
+            background: #000; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-align: center; 
+            text-decoration: none; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            transition: all 0.3s ease; 
+            display: block; 
+        }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; }
+        .search-input { 
+            flex: 1; 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            background: #f9f9f9; 
+            color: #333;
+        }
+
+        /* Lager-Layout */
+        .storage-wrapper {
+            overflow-x: auto;
+            padding: 10px 0;
+        }
+        
+        .storage-grid {
+            display: grid;
+            /* 4 Regale (A, B, C, D) + 2 Gänge */
+            grid-template-columns: 1fr 40px 1fr 1fr 40px 1fr;
+            gap: 15px 0;
+            min-width: 850px;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 12px;
+            border: 2px dashed #cbd5e1;
+        }
+
+        .aisle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            writing-mode: vertical-lr;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            color: #64748b;
+            background: #e2e8f0;
+            border-radius: 6px;
+            user-select: none;
+        }
+
+        .rack {
+            background: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .rack-header {
+            text-align: center;
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #1e293b;
+            margin-bottom: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 6px;
+        }
+
+        .palette-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* Paletten-Proportion: Querformat (Euro-Palette 120 x 80 cm -> Verhältnis 1.5 : 1) */
+        .palette-tile {
+            width: 100%;
+            max-width: 180px;
+            height: 90px;
+            border: 2px solid #334155;
+            border-radius: 6px;
+            background: #f1f5f9;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 6px 8px;
+            font-size: 0.75rem;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .palette-tile:hover {
+            transform: scale(1.05);
+            z-index: 10;
+            box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+        }
+
+        .palette-tile.occupied {
+            background: #dcfce7;
+            border-color: #16a34a;
+            color: #14532d;
+        }
+
+        .palette-tile.highlight {
+            animation: pulse 1s infinite alternate;
+            border-color: #eab308;
+            box-shadow: 0 0 12px #fde047;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.06); }
+        }
+
+        .palette-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .palette-id {
+            font-weight: 800;
+            font-size: 0.75rem;
+            color: #475569;
+        }
+
+        .palette-qty {
+            font-size: 0.7rem;
+            font-weight: 700;
+            background: rgba(255, 255, 255, 0.6);
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+
+        .palette-info {
+            font-weight: 700;
+            font-size: 0.8rem;
+            line-height: 1.1;
+            word-break: break-word;
+            text-align: center;
+            margin: auto 0;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: #475569;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-box { width: 16px; height: 16px; border-radius: 3px; border: 1px solid #333; }
+
+        .loading { text-align: center; padding: 20px; color: #64748b; }
+        .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .modal-field input, .modal-field select, .modal-field textarea { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+        .modal-btn.save { background: #059669; color: white; }
+        .modal-btn.clear { background: #dc2626; color: white; }
+        .modal-btn.cancel { background: #e0e0e0; color: #333; }
+    </style>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <!-- Seitenmenü -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="coupons.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
+  </div>
+
+  <div class="container">
+    <div class="header-row">
+      <h1>🗺️ Lager-Map (Regal A – D)</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
+    
+    <div class="controls">
+      <input type="text" id="searchInput" class="search-input" placeholder="🔍 Artikel oder Stellplatz suchen..." oninput="filterStorage()">
+    </div>
+
+    <div id="errorMsg" class="error"></div>
+    
+    <div class="storage-wrapper">
+      <div id="storageGrid" class="storage-grid">
+        <div class="loading">Lade Lager-Map...</div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-box" style="background:#f1f5f9; border-color:#334155;"></div> Frei</div>
+      <div class="legend-item"><div class="legend-box" style="background:#dcfce7; border-color:#16a34a;"></div> Belegt</div>
+      <div class="legend-item"><div class="legend-box" style="background:#eab308; border-color:#ca8a04;"></div> Treffer</div>
+    </div>
+  </div>
+
+  <!-- Modal zur Paletten-Bearbeitung -->
+  <div id="paletteModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Stellplatz bearbeiten</div>
+      
+      <div class="modal-field">
+        <label>Stellplatz ID</label>
+        <input type="text" id="modalSlotId" readonly style="background:#f1f5f9;">
+      </div>
+
+      <div class="modal-field">
+        <label>Artikelbeschreibung / Material</label>
+        <input type="text" id="modalItem" placeholder="z. B. Kartonagen 40x40">
+      </div>
+
+      <div class="modal-field">
+        <label>Menge / Stückzahl</label>
+        <input type="text" id="modalQty" placeholder="z. B. 120 Stk oder 1 Pal.">
+      </div>
+
+      <div class="modal-field">
+        <label>Hinweise / Bemerkungen</label>
+        <textarea id="modalNotes" rows="2" placeholder="Optionale Details..."></textarea>
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+        <label>Mitarbeiter</label>
+        <select id="modalStaffSelect"><option value="">-- Wählen --</option></select>
+      </div>
+
+      <div class="modal-field">
+        <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
+        <input type="password" id="modalPassword" placeholder="••••••" style="border-color: #fca5a5;">
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn clear" onclick="clearSlot()">Leeren</button>
+        <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
+        <button class="modal-btn save" onclick="saveSlot()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let staffDB = {};
+    let storageData = {};
+    let currentSlotId = null;
+
+    const storageGrid = document.getElementById('storageGrid');
+    const errorMsg = document.getElementById('errorMsg');
+
+    /* Seitenmenü Toggle-Logik */
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() { sideMenu.classList.add('active'); menuOverlay.classList.add('active'); }
+    function closeMenu() { sideMenu.classList.remove('active'); menuOverlay.classList.remove('active'); }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    /* Dynamische Hintergrundfarbe explizit aus Key 'lager' laden */
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const colors = await res.json();
+        
+        // Hintergrundfarbe spezifisch über den Key "lager" setzen
+        if (colors.lager) {
+          document.body.style.background = colors.lager;
+        } else if (colors.background) {
+          document.body.style.background = colors.background;
+        }
+
+        // Farben für Menü-Buttons anwenden
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('colors.json konnte nicht geladen werden.', e);
+      }
+    }
+
+    async function loadStaff() {
+      try {
+        const res = await fetch('staff.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        staffDB = await res.json();
+        const select = document.getElementById('modalStaffSelect');
+        select.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + 
+          Object.keys(staffDB).map(n => `<option value="${n}">${n}</option>`).join('');
+      } catch (e) {
+        console.error('Mitarbeiter-Daten nicht ladbar', e);
+      }
+    }
+
+    /* Lädt Belegungsdaten aus Firestore */
+    async function loadStorageData() {
+      try {
+        const snap = await db.collection('storage').get();
+        storageData = {};
+        snap.forEach(doc => {
+          storageData[doc.id] = doc.data();
+        });
+        renderMap();
+      } catch (e) {
+        console.error(e);
+        showError('Fehler beim Laden der Lagerdaten: ' + e.message);
+      }
+    }
+
+    /* Baut die Map mit 4 Spalten (Regal A, B, C, D) und 2 Gängen auf */
+    function renderMap() {
+      const racks = ['A', 'B', 'C', 'D'];
+      let html = '';
+
+      racks.forEach((rackLetter, index) => {
+        // Gang einfügen nach Regal A (Index 0) und Regal C (Index 2)
+        if (index === 1) {
+          html += `<div class="aisle">Gang 1</div>`;
+        } else if (index === 3) {
+          html += `<div class="aisle">Gang 2</div>`;
+        }
+
+        html += `<div class="rack">
+          <div class="rack-header">Regal ${rackLetter}</div>
+          <div class="palette-list">`;
+
+        // Pro Regal genau 12 Paletten-Stellplätze (einzeln untereinander im Querformat)
+        for (let i = 1; i <= 12; i++) {
+          const num = i < 10 ? '0' + i : i;
+          const slotId = `${rackLetter}-${num}`;
+          const data = storageData[slotId] || {};
+          const isOccupied = data.item && data.item.trim() !== '';
+
+          html += `<div class="palette-tile ${isOccupied ? 'occupied' : ''}" id="slot-${slotId}" onclick="openSlotModal('${slotId}')">
+            <div class="palette-header">
+              <span class="palette-id">${slotId}</span>
+              ${isOccupied && data.qty ? `<span class="palette-qty">${escapeHtml(data.qty)}</span>` : ''}
+            </div>
+            <div class="palette-info">${isOccupied ? escapeHtml(data.item) : ''}</div>
+          </div>`;
+        }
+
+        html += `</div></div>`;
+      });
+
+      storageGrid.innerHTML = html;
+      filterStorage();
+    }
+
+    function escapeHtml(text) {
+      return text ? text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
+    }
+
+    function filterStorage() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      
+      document.querySelectorAll('.palette-tile').forEach(tile => {
+        const slotId = tile.id.replace('slot-', '');
+        const data = storageData[slotId] || {};
+        const match = query !== '' && (
+          slotId.toLowerCase().includes(query) ||
+          (data.item && data.item.toLowerCase().includes(query)) ||
+          (data.qty && data.qty.toLowerCase().includes(query)) ||
+          (data.notes && data.notes.toLowerCase().includes(query))
+        );
+
+        if (match) {
+          tile.classList.add('highlight');
+        } else {
+          tile.classList.remove('highlight');
+        }
+      });
+    }
+
+    function openSlotModal(slotId) {
+      currentSlotId = slotId;
+      const data = storageData[slotId] || {};
+
+      document.getElementById('modalTitle').textContent = `Stellplatz ${slotId} bearbeiten`;
+      document.getElementById('modalSlotId').value = slotId;
+      document.getElementById('modalItem').value = data.item || '';
+      document.getElementById('modalQty').value = data.qty || '';
+      document.getElementById('modalNotes').value = data.notes || '';
+      document.getElementById('modalPassword').value = '';
+
+      document.getElementById('paletteModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('paletteModal').classList.remove('active');
+      currentSlotId = null;
+    }
+
+    async function saveSlot() {
+      const item = document.getElementById('modalItem').value.trim();
+      const qty = document.getElementById('modalQty').value.trim();
+      const notes = document.getElementById('modalNotes').value.trim();
+      const staffUser = document.getElementById('modalStaffSelect').value;
+      const password = document.getElementById('modalPassword').value;
+
+      if (!staffUser || !staffDB[staffUser] || staffDB[staffUser] !== password) {
+        alert('❌ Falsches Passwort oder kein Mitarbeiter ausgewählt.');
+        return;
+      }
+
+      try {
+        const payload = {
+          item: item,
+          qty: qty,
+          notes: notes,
+          updatedBy: staffUser,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('storage').doc(currentSlotId).set(payload, { merge: true });
+        closeModal();
+        loadStorageData();
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
+      }
+    }
+
+    async function clearSlot() {
+      const staffUser = document.getElementById('modalStaffSelect').value;
+      const password = document.getElementById('modalPassword').value;
+
+      if (!staffUser || !staffDB[staffUser] || staffDB[staffUser] !== password) {
+        alert('❌ Falsches Passwort oder kein Mitarbeiter ausgewählt.');
+        return;
+      }
+
+      if (!confirm(`Möchtest du den Stellplatz ${currentSlotId} wirklich leeren?`)) return;
+
+      try {
+        await db.collection('storage').doc(currentSlotId).delete();
+        closeModal();
+        loadStorageData();
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Leeren: ' + e.message);
+      }
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      storageGrid.innerHTML = '';
+    }
+
+    loadColors();
+    loadStaff();
+    loadStorageData();
+  </script>
+</body>
+</html>
