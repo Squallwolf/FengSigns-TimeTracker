@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <title>Gutscheine</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #006060 0%, #096969 100%); 
+            min-height: 100vh; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
+
+        .container { 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
+            padding: 20px; 
+            max-width: 800px; 
+            width: 100%; 
+            margin: 20px 0 10px 0; 
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h1 { 
+            text-align: left; 
+            font-size: 1.4rem; 
+            color: #333; 
+            margin: 0;
+        }
+
+        .open-menu-btn { 
+            background: #000; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease; 
+        }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        /* Seitenmenü / Off-Canvas Overlay */
+        .menu-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            display: none; 
+            z-index: 2000; 
+        }
+        .menu-overlay.active { display: block; }
+        
+        .side-menu { 
+            position: fixed; 
+            top: 0; 
+            left: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); 
+            z-index: 2001; 
+            transition: left 0.3s ease; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            overflow-y: auto; 
+        }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { 
+            align-self: flex-end; 
+            background: none; 
+            border: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: #333; 
+        }
+        .side-menu h2 { 
+            font-size: 1.2rem; 
+            margin-bottom: 10px; 
+            color: #333; 
+            border-bottom: 2px solid #eee; 
+            padding-bottom: 5px; 
+        }
+        
+        .side-menu .nav-btn { 
+            padding: 12px; 
+            border: 1px solid #000; 
+            background: #000; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-align: center; 
+            text-decoration: none; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            transition: all 0.3s ease; 
+            display: block; 
+        }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        .search-input { 
+            flex: 1; 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            background: #f9f9f9; 
+            color: #333;
+        }
+        .action-btn { 
+            padding: 10px 15px; 
+            background: #059669; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            white-space: nowrap; 
+            transition: all 0.3s ease; 
+        }
+        .action-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 600px; }
+        th { 
+            background: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-align: left; 
+            padding: 10px 8px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            border-bottom: 2px solid #cbd5e1; 
+            white-space: nowrap; 
+        }
+        td { padding: 8px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+        tr:last-child td { border-bottom: none; }
+        .code-cell { font-family: ui-monospace, monospace; font-weight: 700; color: #0284c7; }
+        .price-cell { font-family: ui-monospace, monospace; font-weight: 600; text-align: right; }
+        .current-value { font-weight: 700; color: #059669; }
+        .empty-value { color: #dc2626; text-decoration: line-through; }
+        
+        .edit-btn { background: #fbbf24; color: #1f2937; border: none; padding: 5px 10px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .edit-btn:hover { background: #f59e0b; }
+        
+        .loading { text-align: center; padding: 20px; color: #64748b; }
+        .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 400px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .modal-field input, .modal-field select { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+        .modal-btn.save { background: #059669; color: white; }
+        .modal-btn.cancel { background: #e0e0e0; color: #333; }
+    </style>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <!-- Seitenmenü -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="coupons.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
+  </div>
+
+  <div class="container">
+    <div class="header-row">
+      <h1>Gutscheine (im Aufbau)</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
+    
+    <div class="controls">
+      <input type="text" id="searchInput" class="search-input" placeholder="🔍 Code oder Rechnung suchen..." oninput="filterCoupons()">
+      <button class="action-btn" onclick="openAddModal()">➕ Neuer Gutschein</button>
+    </div>
+
+    <div id="errorMsg" class="error"></div>
+    <div id="tableContainer" class="table-wrapper">
+      <div class="loading">Lade Gutscheine...</div>
+    </div>
+  </div>
+
+  <!-- Modal zum Anlegen / Bearbeiten -->
+  <div id="couponModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Gutschein bearbeiten</div>
+      
+      <div class="modal-field">
+        <label>Gutschein-Code</label>
+        <input type="text" id="modalCode" placeholder="z. B. GUT-2026-001">
+      </div>
+
+      <div class="modal-field">
+        <label>Rechnungsbezug / -nummer</label>
+        <input type="text" id="modalInvoice" placeholder="z. B. RE-10492">
+      </div>
+
+      <div class="modal-field">
+        <label>Kaufwert (€)</label>
+        <input type="number" step="0.01" id="modalPurchaseValue" placeholder="20.00">
+      </div>
+
+      <div class="modal-field">
+        <label>Aktueller Wert (€)</label>
+        <input type="number" step="0.01" id="modalCurrentValue" placeholder="6.00">
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+        <label>Mitarbeiter</label>
+        <select id="modalStaffSelect"><option value="">-- Wählen --</option></select>
+      </div>
+
+      <div class="modal-field">
+        <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
+        <input type="password" id="modalPassword" placeholder="••••••" style="border-color: #fca5a5;">
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
+        <button class="modal-btn save" onclick="saveCoupon()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let staffDB = {};
+    let allCoupons = [];
+    let currentEditId = null;
+
+    const tableContainer = document.getElementById('tableContainer');
+    const errorMsg = document.getElementById('errorMsg');
+
+    /* Seitenmenü Toggle-Logik */
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() { sideMenu.classList.add('active'); menuOverlay.classList.add('active'); }
+    function closeMenu() { sideMenu.classList.remove('active'); menuOverlay.classList.remove('active'); }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    /* Dynamische Farben aus colors.json laden (Nutzt 'gutscheine' Key für BG) */
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const colors = await res.json();
+        
+        if (colors.gutscheine) {
+          document.body.style.background = colors.gutscheine;
+        } else if (colors.background) {
+          document.body.style.background = colors.background;
+        }
+
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('colors.json konnte nicht geladen werden.', e);
+      }
+    }
+
+    async function loadStaff() {
+      try {
+        const res = await fetch('staff.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        staffDB = await res.json();
+        const select = document.getElementById('modalStaffSelect');
+        select.innerHTML = '<option value="">-- Mitarbeiter wählen --</option>' + 
+          Object.keys(staffDB).map(n => `<option value="${n}">${n}</option>`).join('');
+      } catch (e) {
+        console.error('Mitarbeiter-Daten nicht ladbar', e);
+      }
+    }
+
+    function fmtEuro(val) {
+      const num = parseFloat(val) || 0;
+      return num.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+    }
+
+    async function loadCoupons() {
+      try {
+        const snap = await db.collection('coupons').orderBy('createdAt', 'desc').get();
+        allCoupons = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        renderCoupons(allCoupons);
+      } catch (e) {
+        console.error(e);
+        showError('Fehler beim Laden der Gutscheine: ' + e.message);
+      }
+    }
+
+    function renderCoupons(coupons) {
+      if (coupons.length === 0) {
+        tableContainer.innerHTML = '<div class="loading">Keine Gutscheine vorhanden.</div>';
+        return;
+      }
+
+      let html = `<table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Rechnung</th>
+            <th style="text-align:right;">Kaufwert</th>
+            <th style="text-align:right;">Aktuell</th>
+            <th style="text-align:center;">Aktion</th>
+          </tr>
+        </thead>
+        <tbody>`;
+
+      coupons.forEach(c => {
+        const currVal = parseFloat(c.currentValue) || 0;
+        const currClass = currVal <= 0 ? 'empty-value' : 'current-value';
+
+        html += `<tr>
+          <td class="code-cell">${c.code || '-'}</td>
+          <td>${c.invoiceRef || '-'}</td>
+          <td class="price-cell">${fmtEuro(c.purchaseValue)}</td>
+          <td class="price-cell ${currClass}">${fmtEuro(c.currentValue)}</td>
+          <td style="text-align: center;">
+            <button class="edit-btn" onclick="openEditModal('${c.id}')">✏️ Bearbeiten</button>
+          </td>
+        </tr>`;
+      });
+
+      html += '</tbody></table>';
+      tableContainer.innerHTML = html;
+    }
+
+    function filterCoupons() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      const filtered = allCoupons.filter(c => 
+        (c.code && c.code.toLowerCase().includes(query)) || 
+        (c.invoiceRef && c.invoiceRef.toLowerCase().includes(query))
+      );
+      renderCoupons(filtered);
+    }
+
+    function openAddModal() {
+      currentEditId = null;
+      document.getElementById('modalTitle').textContent = 'Neuen Gutschein anlegen';
+      document.getElementById('modalCode').value = '';
+      document.getElementById('modalInvoice').value = '';
+      document.getElementById('modalPurchaseValue').value = '';
+      document.getElementById('modalCurrentValue').value = '';
+      document.getElementById('modalPassword').value = '';
+      
+      // Bei Neuanlage den aktuellen Wert automatisch an den Kaufwert anpassen
+      document.getElementById('modalPurchaseValue').oninput = (e) => {
+        if(!currentEditId) {
+          document.getElementById('modalCurrentValue').value = e.target.value;
+        }
+      };
+
+      document.getElementById('couponModal').classList.add('active');
+    }
+
+    function openEditModal(id) {
+      const coupon = allCoupons.find(c => c.id === id);
+      if (!coupon) return;
+
+      currentEditId = id;
+      document.getElementById('modalTitle').textContent = 'Gutschein bearbeiten';
+      document.getElementById('modalCode').value = coupon.code || '';
+      document.getElementById('modalInvoice').value = coupon.invoiceRef || '';
+      document.getElementById('modalPurchaseValue').value = coupon.purchaseValue || '';
+      document.getElementById('modalCurrentValue').value = coupon.currentValue || '';
+      document.getElementById('modalPassword').value = '';
+      document.getElementById('modalPurchaseValue').oninput = null;
+
+      document.getElementById('couponModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('couponModal').classList.remove('active');
+      currentEditId = null;
+    }
+
+    async function saveCoupon() {
+      const code = document.getElementById('modalCode').value.trim();
+      const invoiceRef = document.getElementById('modalInvoice').value.trim();
+      const purchaseValue = parseFloat(document.getElementById('modalPurchaseValue').value) || 0;
+      const currentValue = parseFloat(document.getElementById('modalCurrentValue').value) || 0;
+      const staffUser = document.getElementById('modalStaffSelect').value;
+      const password = document.getElementById('modalPassword').value;
+
+      if (!code) {
+        alert('Bitte einen Gutschein-Code eingeben.');
+        return;
+      }
+
+      if (!staffUser || !staffDB[staffUser] || staffDB[staffUser] !== password) {
+        alert('❌ Falsches Passwort oder kein Mitarbeiter ausgewählt.');
+        return;
+      }
+
+      const payload = {
+        code: code,
+        invoiceRef: invoiceRef,
+        purchaseValue: purchaseValue,
+        currentValue: currentValue,
+        updatedBy: staffUser,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+
+      try {
+        if (currentEditId) {
+          await db.collection('coupons').doc(currentEditId).update(payload);
+        } else {
+          payload.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+          await db.collection('coupons').add(payload);
+        }
+
+        closeModal();
+        loadCoupons();
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
+      }
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      tableContainer.innerHTML = '';
+    }
+
+    loadColors();
+    loadStaff();
+    loadCoupons();
+  </script>
+</body>
+</html>
