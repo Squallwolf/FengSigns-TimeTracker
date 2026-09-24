@@ -289,15 +289,6 @@
         .modal-field { margin-bottom: 12px; }
         .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
         .modal-field input, .modal-field select, .modal-field textarea { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
-        
-        /* Gestyltes nicht-editierbares Feld für Stellplatz ID */
-        .modal-field input[readonly] {
-            background-color: #f1f5f9;
-            color: #0f172a;
-            font-weight: 700;
-            border-color: #cbd5e1;
-            cursor: not-allowed;
-        }
 
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
         .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
@@ -325,7 +316,7 @@
 
   <div class="container">
     <div class="header-row">
-      <h1> Lager Fruchtfliege </h1>
+      <h1> Lager Fruchtfliege</h1>
       <button class="open-menu-btn" id="openMenuBtn">☰</button>
     </div>
     
@@ -352,12 +343,6 @@
   <div id="paletteModal" class="modal">
     <div class="modal-content">
       <div class="modal-header" id="modalTitle">Stellplatz bearbeiten</div>
-      
-      <!-- Nicht editierbare Stellplatz ID -->
-      <div class="modal-field">
-        <label>Stellplatz ID (nicht änderbar)</label>
-        <input type="text" id="modalSlotId" readonly tabindex="-1">
-      </div>
 
       <!-- Mehrzeiliges Textarea für Mischplätze -->
       <div class="modal-field">
@@ -537,7 +522,6 @@
       const data = storageData[slotId] || {};
 
       document.getElementById('modalTitle').textContent = `Stellplatz ${slotId} bearbeiten`;
-      document.getElementById('modalSlotId').value = slotId;
       document.getElementById('modalItem').value = data.item || '';
       document.getElementById('modalQty').value = data.qty || '';
       document.getElementById('modalNotes').value = data.notes || '';
