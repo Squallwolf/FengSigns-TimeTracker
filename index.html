@@ -39,13 +39,21 @@
     /* Export Grid (Page Level) */
     .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem; }
     .export-wrapper { position: relative; width: 100%; }
-    .export-btn { width: 100%; padding: 10px; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: left; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s ease; }
-    .export-btn:hover { background: #667eea; color: white; transform: translateY(-1px); box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2); }
     
-    .export-btn.current-month { border-color: #059669; color: #059669; }
-    .export-btn.current-month:hover { background: #059669; color: white; box-shadow: 0 4px 8px rgba(5, 150, 105, 0.2); }
+    .export-btn { width: 100%; padding: 0; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; display: flex; align-items: stretch; transition: all 0.2s ease; overflow: hidden; text-align: left; }
+    .export-btn:hover { box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2); }
+    
+    .export-main { flex: 1; padding: 10px; display: flex; align-items: center; }
+    .export-main:hover { background: #667eea; color: white; }
 
-    .export-arrow { margin-left: 4px; font-size: 0.7rem; transition: transform 0.2s; padding: 2px; }
+    .export-arrow { display: flex; align-items: center; justify-content: center; padding: 0 12px; font-size: 0.8rem; border-left: 2px solid #667eea; transition: transform 0.2s, background 0.2s; background: rgba(102, 126, 234, 0.05); }
+    .export-arrow:hover { background: #667eea; color: white; }
+
+    .export-btn.current-month { border-color: #059669; color: #059669; }
+    .export-btn.current-month .export-main:hover { background: #059669; color: white; }
+    .export-btn.current-month .export-arrow { border-left-color: #059669; background: rgba(5, 150, 105, 0.05); }
+    .export-btn.current-month .export-arrow:hover { background: #059669; color: white; }
+
     .export-arrow.open { transform: rotate(180deg); }
     .export-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 2px solid #667eea; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; display: none; }
     .export-dropdown.current-month-dropdown { border-color: #059669; }
@@ -120,7 +128,10 @@
     <div class="export-grid">
       <!-- Export: Letzter Monat -->
       <div class="export-wrapper">
-        <button id="exportBtn" class="export-btn"><span>Letzter Monat</span><span class="export-arrow" id="exportArrow">▼</span></button>
+        <button id="exportBtn" class="export-btn" type="button">
+          <span class="export-main">Letzter Monat</span>
+          <span class="export-arrow" id="exportArrow">▼</span>
+        </button>
         <div class="export-dropdown" id="exportDropdown">
           <div class="export-option active" data-format="pdf">PDF (Standard)</div>
           <div class="export-option" data-format="excel">Excel (.xlsx)</div>
@@ -129,7 +140,10 @@
 
       <!-- Export: Dieser Monat -->
       <div class="export-wrapper">
-        <button id="exportCurrentBtn" class="export-btn current-month"><span>Dieser Monat</span><span class="export-arrow" id="exportCurrentArrow">▼</span></button>
+        <button id="exportCurrentBtn" class="export-btn current-month" type="button">
+          <span class="export-main">Dieser Monat</span>
+          <span class="export-arrow" id="exportCurrentArrow">▼</span>
+        </button>
         <div class="export-dropdown current-month-dropdown" id="exportCurrentDropdown">
           <div class="export-option active" data-format="pdf">PDF (Standard)</div>
           <div class="export-option" data-format="excel">Excel (.xlsx)</div>
@@ -305,11 +319,11 @@ loadColors();
     
     // === EXPORT DROPDOWNS SETUP ===
     exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); });
-    exportBtn.addEventListener('click', (e) => { if (e.target !== exportArrow) exportData(selectedFormat); });
+    exportBtn.addEventListener('click', (e) => { if (!e.target.closest('#exportArrow')) exportData(selectedFormat); });
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
 
     exportCurrentArrow.addEventListener('click', (e) => { e.stopPropagation(); exportCurrentDropdown.classList.toggle('show'); exportCurrentArrow.classList.toggle('open'); exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); });
-    exportCurrentBtn.addEventListener('click', (e) => { if (e.target !== exportCurrentArrow) exportCurrentMonthData(selectedCurrentFormat); });
+    exportCurrentBtn.addEventListener('click', (e) => { if (!e.target.closest('#exportCurrentArrow')) exportCurrentMonthData(selectedCurrentFormat); });
     exportCurrentOptions.forEach(opt => { opt.addEventListener('click', () => { exportCurrentOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedCurrentFormat = opt.dataset.format; exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }); });
 
     document.addEventListener('click', (e) => { 
@@ -475,7 +489,7 @@ loadColors();
     // === EXPORT (LETZTER MONAT) ===
     async function exportData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      exportBtn.disabled = true; exportBtn.querySelector('span').textContent = 'Erstelle...';
+      exportBtn.disabled = true; exportBtn.querySelector('.export-main').textContent = 'Erstelle...';
       try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -491,11 +505,8 @@ loadColors();
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
           const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          
-          // FIX: Use actual recorded break time if it meets/exceeds requirements, otherwise show legal break or deficit logic
           const effectiveBreak = Math.max(stats.breakMin, stats.req);
           const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
-          
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
@@ -523,13 +534,13 @@ loadColors();
           XLSX.utils.book_append_sheet(wb, ws, "Zeiten"); XLSX.writeFile(wb, `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.xlsx`);
         }
       } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
-      exportBtn.disabled = false; exportBtn.querySelector('span').textContent = 'Letzter Monat';
+      exportBtn.disabled = false; exportBtn.querySelector('.export-main').textContent = 'Letzter Monat';
     }
 
     // === EXPORT (DIESER MONAT) ===
     async function exportCurrentMonthData(format) {
       if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      exportCurrentBtn.disabled = true; exportCurrentBtn.querySelector('span').textContent = 'Erstelle...';
+      exportCurrentBtn.disabled = true; exportCurrentBtn.querySelector('.export-main').textContent = 'Erstelle...';
       try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -545,11 +556,8 @@ loadColors();
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
           const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          
-          // FIX: Use actual recorded break time if it meets/exceeds requirements, otherwise show legal break or deficit logic
           const effectiveBreak = Math.max(stats.breakMin, stats.req);
           const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
-          
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
@@ -577,7 +585,7 @@ loadColors();
           XLSX.utils.book_append_sheet(wb, ws, "Zeiten"); XLSX.writeFile(wb, `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.xlsx`);
         }
       } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
-      exportCurrentBtn.disabled = false; exportCurrentBtn.querySelector('span').textContent = 'Dieser Monat';
+      exportCurrentBtn.disabled = false; exportCurrentBtn.querySelector('.export-main').textContent = 'Dieser Monat';
     }
   </script>
 </body>
