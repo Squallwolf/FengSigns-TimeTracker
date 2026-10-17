@@ -491,7 +491,11 @@ loadColors();
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
           const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          
+          // FIX: Use actual recorded break time if it meets/exceeds requirements, otherwise show legal break or deficit logic
+          const effectiveBreak = Math.max(stats.breakMin, stats.req);
+          const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
+          
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
@@ -541,7 +545,11 @@ loadColors();
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
           const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          
+          // FIX: Use actual recorded break time if it meets/exceeds requirements, otherwise show legal break or deficit logic
+          const effectiveBreak = Math.max(stats.breakMin, stats.req);
+          const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
+          
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
