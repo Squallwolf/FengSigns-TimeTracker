@@ -112,8 +112,6 @@
     </div>
     
     <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
-    <!--  <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
-    -->
     <a href="https://squallwolf.github.io/FengSigns-TimeTracker/order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
     <a href="https://squallwolf.github.io/FengSigns-TimeTracker/inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
     <a href="https://squallwolf.github.io/FengSigns-TimeTracker/timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
@@ -174,55 +172,46 @@
     const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
     const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; };
     const showWarning = (msg) => { const el = document.getElementById('warningMsg'); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); };
-    // === DYNAMISCHE FARBEN LADEFUNKTION MIT FAILSAFE ===
-async function loadColors() {
-  try {
-    const res = await fetch('colors.json');
-    if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
-    const colors = await res.json();
     
-    // Haupt-Hintergrundfarbe setzen
-    if (colors.zeiterfassung) {
-      document.body.style.backgroundColor = colors.zeiterfassung;
-    }
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
+        const colors = await res.json();
+        
+        if (colors.zeiterfassung) {
+          document.body.style.backgroundColor = colors.zeiterfassung;
+        }
 
-    // Navigations-Buttons mit passenden Farben dynamisch färben
-    document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
-      const key = btn.getAttribute('data-color-key');
-      if (colors[key]) {
-        btn.style.backgroundColor = colors[key];
-        btn.style.color = '#ffffff';
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
+        document.body.style.backgroundColor = '#ffffff';
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.style.backgroundColor = '#000000';
+          btn.style.color = '#ffffff';
+          btn.style.border = '1px solid #000000';
+        });
+        const menuToggle = document.getElementById('openMenuBtn');
+        if (menuToggle) {
+          menuToggle.style.backgroundColor = '#000000';
+          menuToggle.style.color = '#ffffff';
+        }
       }
-    });
-  } catch (e) {
-    console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
-    
-    // === FAILSAFE: SCHWARZ & WEISS ===
-    document.body.style.backgroundColor = '#ffffff';
-
-    // Alle Navigations-Buttons auf Schwarz/Weiß setzen
-    document.querySelectorAll('.nav-btn').forEach(btn => {
-      btn.style.backgroundColor = '#000000';
-      btn.style.color = '#ffffff';
-      btn.style.border = '1px solid #000000';
-    });
-
-    // Optional: Auch den Menü-Toggle-Button auf Schwarz/Weiß anpassen
-    const menuToggle = document.getElementById('openMenuBtn');
-    if (menuToggle) {
-      menuToggle.style.backgroundColor = '#000000';
-      menuToggle.style.color = '#ffffff';
     }
-  }
-}
-loadColors();
+    loadColors();
 
     const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
     firebase.initializeApp(firebaseConfig); 
     const db = firebase.firestore(); 
     db.settings({ ignoreUndefinedProperties: true });
     
-    // === UI ELEMENTS ===
     const sel = document.getElementById('employee');
     const btn = document.getElementById('stampBtn');
     const status = document.getElementById('status');
@@ -231,19 +220,16 @@ loadColors();
     const list = document.getElementById('entryList');
     const rangeFilter = document.getElementById('rangeFilter');
     
-    // Export Elements: Letzter Monat
     const exportBtn = document.getElementById('exportBtn');
     const exportArrow = document.getElementById('exportArrow');
     const exportDropdown = document.getElementById('exportDropdown');
     const exportOptions = exportDropdown.querySelectorAll('.export-option');
 
-    // Export Elements: Dieser Monat
     const exportCurrentBtn = document.getElementById('exportCurrentBtn');
     const exportCurrentArrow = document.getElementById('exportCurrentArrow');
     const exportCurrentDropdown = document.getElementById('exportCurrentDropdown');
     const exportCurrentOptions = exportCurrentDropdown.querySelectorAll('.export-option');
 
-    // === SIDE MENU CONTROLS ===
     const sidebar = document.getElementById('sidebar');
     const sidebarOverlay = document.getElementById('sidebarOverlay');
     const openMenuBtn = document.getElementById('openMenuBtn');
@@ -269,7 +255,6 @@ loadColors();
     let selectedCurrentFormat = 'pdf';
     const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
     
-    // === STAFF / PASSWORD ===
     let staffDB = {};
     
     function populateEmployeeDropdown() {
@@ -300,7 +285,6 @@ loadColors();
     function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
     loadStaff();
     
-    // === EVENT LISTENERS ===
     sel.addEventListener('change', () => {
       user = sel.value; 
       localStorage.setItem('tz_user', user);
@@ -318,7 +302,6 @@ loadColors();
     
     rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
     
-    // === EXPORT DROPDOWNS SETUP ===
     exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); });
     exportBtn.addEventListener('click', (e) => { if (!e.target.closest('#exportArrow')) exportData(selectedFormat); });
     exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
@@ -332,7 +315,6 @@ loadColors();
       if (!exportCurrentBtn.contains(e.target) && !exportCurrentDropdown.contains(e.target)) { exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }
     });
     
-    // === HELPERS ===
     function toDateSafe(val) {
       if (!val) return null; 
       if (val.toDate) return val.toDate();
@@ -371,7 +353,6 @@ loadColors();
       return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); 
     }
     
-    // === PAUSEN-BERECHNUNG (EXPORT) ===
     function getRequiredBreak(workMinutes) { if (workMinutes >= 540) return 45; if (workMinutes >= 360) return 30; return 0; }
     function analyzeDay(entries) {
       let workMin = 0, breakMin = 0;
@@ -388,7 +369,6 @@ loadColors();
       return { workMin, breakMin, req, deficit: Math.max(0, req - breakMin) };
     }
     
-    // === LOAD USER STATE ===
     async function loadUserState() {
       if(!user) return;
       btn.disabled = true; status.textContent = "Lade..."; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
@@ -421,7 +401,6 @@ loadColors();
       btn.disabled = false;
     }
     
-    // === RENDER LIST ===
     function renderList(entries) {
       if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
       const days = parseInt(rangeFilter.value); const byDay = {};
@@ -454,7 +433,6 @@ loadColors();
       document.querySelectorAll('.corr-btn').forEach(b => { b.onclick = (ev) => { correctTimestamp(ev.target.dataset.id, ev.target.dataset.f, ev.target.dataset.v); }; });
     }
     
-    // === MANUELLE KORREKTUR ===
     async function correctTimestamp(id, field, isoVal) {
       const pw = document.getElementById('password')?.value || '';
       if(!checkPassword(user, pw)) { alert('❌ Falsches Passwort – keine Änderung möglich.'); return; }
@@ -469,7 +447,6 @@ loadColors();
       catch(e) { showError('Fehler: '+e.message); }
     }
     
-    // === STAMP BUTTON ===
     btn.addEventListener('click', async () => {
       if(!user) return;
       const pw = document.getElementById('password')?.value || '';
@@ -517,7 +494,12 @@ loadColors();
             const lastEntry = dayEntries[dayEntries.length-1];
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
-          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
+          
+          // Notiz für die Hinweis-Spalte extrahieren
+          const noteText = dayEntries.find(e => e.note)?.note || '';
+          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
+          
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
         });
         tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
         
@@ -568,7 +550,12 @@ loadColors();
             const lastEntry = dayEntries[dayEntries.length-1];
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
-          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
+          
+          // NEU: Notiz für die Hinweis-Spalte extrahieren
+          const noteText = dayEntries.find(e => e.note)?.note || '';
+          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
+          
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
         });
         tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
         
