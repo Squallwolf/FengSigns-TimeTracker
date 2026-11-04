@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- NEU: Favicon hinzugefügt, um den favicon.ico Fehler zu beheben -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
     <title>Stundenzettel</title>
     <style>
@@ -28,7 +30,6 @@
             margin: 20px 0 10px 0; 
         }
 
-        /* Header-Zeile: Überschrift links, Button rechtsbündig auf gleicher Höhe */
         .header-row {
             display: flex;
             justify-content: space-between;
@@ -56,7 +57,6 @@
         }
         .open-menu-btn:hover { opacity: 0.85; }
 
-        /* Seitenmenü / Off-Canvas Overlay */
         .menu-overlay { 
             position: fixed; 
             top: 0; 
@@ -158,7 +158,7 @@
             border-bottom: 2px solid #cbd5e1; 
             white-space: nowrap; 
         }
-        td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; }
+        td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; vertical-align: middle; }
         tr:last-child td { border-bottom: none; }
         .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
         .duration-cell { text-align: right; color: #64748b; }
@@ -181,9 +181,21 @@
         .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
         .modal-btn.save { background: #667eea; color: white; }
         .modal-btn.cancel { background: #e0e0e0; color: #333; }
+        
+        .note-row td {
+            background-color: #f8fafc;
+            padding: 8px 12px !important;
+            border-top: 1px solid #e2e8f0;
+            border-left: 3px solid #667eea;
+            font-size: 0.85rem;
+            color: #475569;
+            font-style: italic;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.4;
+            word-break: break-word;
+        }
     </style>
     
-    <!-- PDF Export Bibliotheken -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     
@@ -192,7 +204,6 @@
 </head>
 <body>
 
-  <!-- Seitenmenü -->
   <div class="menu-overlay" id="menuOverlay"></div>
   <div class="side-menu" id="sideMenu">
     <button class="close-btn" id="closeMenuBtn">&times;</button>
@@ -205,7 +216,6 @@
   </div>
 
   <div class="container">
-    <!-- Header-Zeile: Überschrift links, Menu-Button rechts daneben -->
     <div class="header-row">
       <h1>📅 Stundenzettel (Laufender Monat)</h1>
       <button class="open-menu-btn" id="openMenuBtn">☰</button>
@@ -257,6 +267,11 @@
       </div>
 
       <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+        <label>📝 Notiz (optional)</label>
+        <input type="text" id="editNote" placeholder="z.B. Überstunden, Krank, Baustelle XY" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; color: #333;">
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px;">
         <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
         <input type="password" id="editPassword" placeholder="••••••" style="border-color: #fca5a5;">
       </div>
@@ -281,7 +296,6 @@
     const errorMsg = document.getElementById('errorMsg');
     const exportPdfBtn = document.getElementById('exportPdfBtn');
 
-    /* Seitenmenü Toggle-Logik */
     const openMenuBtn = document.getElementById('openMenuBtn');
     const closeMenuBtn = document.getElementById('closeMenuBtn');
     const sideMenu = document.getElementById('sideMenu');
@@ -301,14 +315,13 @@
     closeMenuBtn.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    /* Dynamische Farben & Hintergrund aus colors.json laden */
     async function loadColors() {
       try {
-        const res = await fetch('colors.json');
+        // NEU: Cache-Busting hinzugefügt
+        const res = await fetch('colors.json?cb=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
-        // Dynamischer Hintergrund für body über den Key 'timesheet'
         if (colors.timesheet) {
           document.body.style.background = colors.timesheet;
         } else if (colors.background) {
@@ -317,7 +330,6 @@
           document.body.style.background = `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`;
         }
 
-        // Navigations-Buttons dynamisch einfärben
         document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
           const key = btn.getAttribute('data-color-key');
           if (colors[key]) {
@@ -351,8 +363,11 @@
 
     async function loadStaff() {
       try {
-        const res = await fetch('staff.json');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // NEU: Cache-Busting hinzugefügt, damit GitHub Pages immer die neueste Datei liefert
+        const res = await fetch('staff.json?cb=' + Date.now());
+        if (!res.ok) {
+            throw new Error('HTTP Status: ' + res.status + ' (Prüfe, ob staff.json im selben Ordner liegt)');
+        }
         staffDB = await res.json();
         const names = Object.keys(staffDB);
         employeeSelect.innerHTML = '<option value="">-- Bitte wählen --</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
@@ -363,7 +378,8 @@
           loadTimesheet(savedUser);
         }
       } catch (e) {
-        showError('Mitarbeiter-Daten nicht ladbar.');
+        console.error('Fehler beim Laden von staff.json:', e); // NEU: Detaillierter Console-Error
+        showError('Mitarbeiter-Daten nicht ladbar. (F12 drücken für Details)');
       }
     }
 
@@ -473,6 +489,7 @@
             employee: data.employee,
             startTime: data.startTime,
             endTime: data.endTime,
+            note: data.note || '',
             startMs: start.getTime(),
             endMs: data.endTime ? toDateSafe(data.endTime).getTime() : start.getTime()
           };
@@ -502,11 +519,11 @@
         if (hasComplexDays) {
           headerHtml = `<tr>
             <th style="width:12%">Tag</th>
-            <th style="width:15%">Von</th>
-            <th style="width:15%">Bis</th>
+            <th style="width:18%">Von</th>
+            <th style="width:18%">Bis</th>
             <th style="width:15%">Dauer</th>
             <th style="width:15%; text-align:right;">Gesamt</th>
-            <th style="width:28%; text-align:center;">Aktion</th>
+            <th style="width:22%; text-align:center;">Aktion</th>
           </tr>`;
         } else {
           headerHtml = `<tr>
@@ -527,6 +544,9 @@
           const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
           const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
           const canEdit = isEditable(dateKey);
+
+          const dayNote = entries.find(e => e.note)?.note;
+          const noteRowHtml = dayNote ? `<tr class="note-row"><td colspan="7">📝 ${dayNote}</td></tr>` : '';
 
           if (entries.length === 0) {
             const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">➕</button>` : '';
@@ -554,6 +574,7 @@
               const inTime = fmtTime(d1.startTime);
               const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
               const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+              
               html += `<tr>
                 <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
                 <td>${inTime}</td>
@@ -562,6 +583,8 @@
                 <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
                 <td style="text-align: center;">${editBtn}</td>
               </tr>`;
+              if (noteRowHtml) html += noteRowHtml;
+              
             } else {
               entries.forEach((entry, index) => {
                 const isLast = index === entries.length - 1;
@@ -569,6 +592,7 @@
                 const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
                 const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
                 const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button>` : '';
+                
                 html += `<tr>
                   <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
                   <td>${fmtTime(entry.startTime)}</td>
@@ -578,6 +602,7 @@
                   <td style="text-align: center;">${editBtn}</td>
                 </tr>`;
               });
+              if (noteRowHtml) html += noteRowHtml;
             }
           } else {
             const d1 = entries[0];
@@ -587,6 +612,7 @@
             const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
             const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
             const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+            
             html += `<tr>
               <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
               <td>${inTime}</td>
@@ -596,6 +622,7 @@
               <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
               <td style="text-align: center;">${editBtn}</td>
             </tr>`;
+            if (noteRowHtml) html += noteRowHtml;
           }
         }
 
@@ -619,6 +646,7 @@
       document.getElementById('dayEditFields').style.display = 'block';
       document.getElementById('rowEditFields').style.display = 'none';
       document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = (dayEntries.length > 0 && dayEntries[0].note) ? dayEntries[0].note : '';
 
       if (dayEntries.length === 0) {
         editMode = 'day-new';
@@ -658,6 +686,7 @@
       
       document.getElementById('editRowIn').value = fmtTime(entry.startTime);
       document.getElementById('editRowOut').value = entry.endTime ? fmtTime(entry.endTime) : '';
+      document.getElementById('editNote').value = entry.note || '';
       
       document.getElementById('editModal').classList.add('active');
     }
@@ -665,6 +694,7 @@
     function closeModal() {
       document.getElementById('editModal').classList.remove('active');
       document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = '';
       editMode = '';
       currentEditDateKey = null;
       currentEditEntryId = null;
@@ -677,6 +707,8 @@
         document.getElementById('editPassword').value = '';
         return;
       }
+
+      const note = document.getElementById('editNote').value.trim();
 
       try {
         if (editMode === 'day-new') {
@@ -705,6 +737,7 @@
               employee: currentUser,
               startTime: firebase.firestore.Timestamp.fromDate(start1),
               endTime: firebase.firestore.Timestamp.fromDate(end1),
+              note: note,
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
 
@@ -733,6 +766,7 @@
               employee: currentUser,
               startTime: firebase.firestore.Timestamp.fromDate(start),
               endTime: firebase.firestore.Timestamp.fromDate(end),
+              note: note,
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
           }
@@ -745,7 +779,7 @@
           const outTime = document.getElementById('editOut').value;
           
           if (pauseInTime && pauseOutTime) {
-            await updateEntry(dayEntries[0].id, inTime, pauseInTime);
+            await updateEntry(dayEntries[0].id, inTime, pauseInTime, note);
             const baseDate = toDateSafe(dayEntries[0].startTime);
             const newStart = new Date(baseDate);
             const [h1, m1] = pauseOutTime.split(':');
@@ -761,7 +795,7 @@
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
           } else {
-            await updateEntry(dayEntries[0].id, inTime, outTime);
+            await updateEntry(dayEntries[0].id, inTime, outTime, note);
           }
         } 
         else if (editMode === 'day-2') {
@@ -771,13 +805,13 @@
           const pOutTime = document.getElementById('editPauseOut').value;
           const outTime = document.getElementById('editOut').value;
           
-          await updateEntry(dayEntries[0].id, inTime, pInTime);
+          await updateEntry(dayEntries[0].id, inTime, pInTime, note);
           await updateEntry(dayEntries[1].id, pOutTime, outTime);
         } 
         else if (editMode === 'row') {
           const inTime = document.getElementById('editRowIn').value;
           const outTime = document.getElementById('editRowOut').value;
-          await updateEntry(currentEditEntryId, inTime, outTime);
+          await updateEntry(currentEditEntryId, inTime, outTime, note);
         }
         
         closeModal();
@@ -788,7 +822,7 @@
       }
     }
 
-    async function updateEntry(id, inStr, outStr) {
+    async function updateEntry(id, inStr, outStr, note) {
       const entry = currentEntries.find(e => e.id === id);
       if (!entry) return;
       
@@ -805,6 +839,10 @@
         const [h2, m2] = outStr.split(':');
         newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
         updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+      }
+
+      if (note !== undefined) {
+        updateData.note = note;
       }
 
       await db.collection('entries').doc(id).update(updateData);
@@ -862,7 +900,11 @@
             const lastEntry = dayEntries[dayEntries.length-1];
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
-          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), '']);
+          
+          const noteText = dayEntries.find(e => e.note)?.note || '';
+          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
+          
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
         });
         
         tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
@@ -881,7 +923,7 @@
           theme: 'grid', 
           headStyles: { fillColor: [5, 150, 105] }, 
           styles: { fontSize: 9, cellPadding: 3 }, 
-          columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, 
+          columnStyles: { 0: {cellWidth: 25}, 1: {cellWidth: 20}, 2: {cellWidth: 20}, 3: {cellWidth: 20}, 4: {cellWidth: 25}, 5: {cellWidth: 50} }, 
           didDrawPage: function(data) { 
             if (data.pageNumber === doc.internal.getNumberOfPages()) { 
               const finalY = data.cursor.y + 10; 
