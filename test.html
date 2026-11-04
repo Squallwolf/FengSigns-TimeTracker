@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- NEU: Favicon hinzugefügt, um den favicon.ico Fehler zu beheben -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
     <title>Stundenzettel</title>
     <style>
@@ -180,12 +182,11 @@
         .modal-btn.save { background: #667eea; color: white; }
         .modal-btn.cancel { background: #e0e0e0; color: #333; }
         
-        /* NEU: Styling für die vollbreite Notiz-Zeile */
         .note-row td {
             background-color: #f8fafc;
             padding: 8px 12px !important;
             border-top: 1px solid #e2e8f0;
-            border-left: 3px solid #667eea; /* Akzentfarbe */
+            border-left: 3px solid #667eea;
             font-size: 0.85rem;
             color: #475569;
             font-style: italic;
@@ -195,7 +196,6 @@
         }
     </style>
     
-    <!-- PDF Export Bibliotheken -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     
@@ -204,7 +204,6 @@
 </head>
 <body>
 
-  <!-- Seitenmenü -->
   <div class="menu-overlay" id="menuOverlay"></div>
   <div class="side-menu" id="sideMenu">
     <button class="close-btn" id="closeMenuBtn">&times;</button>
@@ -318,7 +317,8 @@
 
     async function loadColors() {
       try {
-        const res = await fetch('colors.json');
+        // NEU: Cache-Busting hinzugefügt
+        const res = await fetch('colors.json?cb=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
@@ -363,8 +363,11 @@
 
     async function loadStaff() {
       try {
-        const res = await fetch('staff.json');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        // NEU: Cache-Busting hinzugefügt, damit GitHub Pages immer die neueste Datei liefert
+        const res = await fetch('staff.json?cb=' + Date.now());
+        if (!res.ok) {
+            throw new Error('HTTP Status: ' + res.status + ' (Prüfe, ob staff.json im selben Ordner liegt)');
+        }
         staffDB = await res.json();
         const names = Object.keys(staffDB);
         employeeSelect.innerHTML = '<option value="">-- Bitte wählen --</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
@@ -375,7 +378,8 @@
           loadTimesheet(savedUser);
         }
       } catch (e) {
-        showError('Mitarbeiter-Daten nicht ladbar.');
+        console.error('Fehler beim Laden von staff.json:', e); // NEU: Detaillierter Console-Error
+        showError('Mitarbeiter-Daten nicht ladbar. (F12 drücken für Details)');
       }
     }
 
@@ -541,7 +545,6 @@
           const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
           const canEdit = isEditable(dateKey);
 
-          // Helfer für die vollbreite Notiz-Zeile (colspan=7 deckt alle Spalten ab)
           const dayNote = entries.find(e => e.note)?.note;
           const noteRowHtml = dayNote ? `<tr class="note-row"><td colspan="7">📝 ${dayNote}</td></tr>` : '';
 
@@ -580,11 +583,9 @@
                 <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
                 <td style="text-align: center;">${editBtn}</td>
               </tr>`;
-              // Notiz unter der Zeile einfügen
               if (noteRowHtml) html += noteRowHtml;
               
             } else {
-              // Mehr als 2 Blöcke: Jeder Block eine Zeile, Notiz am Ende des Tages
               entries.forEach((entry, index) => {
                 const isLast = index === entries.length - 1;
                 const tag = index === 0 ? fmtDateShort(dateKey) : '';
@@ -601,7 +602,6 @@
                   <td style="text-align: center;">${editBtn}</td>
                 </tr>`;
               });
-              // Notiz unter dem letzten Block des Tages einfügen
               if (noteRowHtml) html += noteRowHtml;
             }
           } else {
@@ -622,7 +622,6 @@
               <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
               <td style="text-align: center;">${editBtn}</td>
             </tr>`;
-            // Notiz unter der Zeile einfügen
             if (noteRowHtml) html += noteRowHtml;
           }
         }
@@ -656,4 +655,305 @@
         document.getElementById('editPauseIn').value = '';
         document.getElementById('editPauseOut').value = '';
         document.getElementById('editOut').value = '17:00';
-      } else if (dayEntries.length === 1
+      } else if (dayEntries.length === 1) {
+        editMode = 'day-1';
+        document.getElementById('modalTitle').textContent = 'Eintrag bearbeiten (Pause nachtragen möglich)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = fmtTime(dayEntries[0].endTime);
+      } else {
+        editMode = 'day-2';
+        document.getElementById('modalTitle').textContent = 'Tageszeiten bearbeiten (2 Blöcke)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = fmtTime(dayEntries[0].endTime);
+        document.getElementById('editPauseOut').value = fmtTime(dayEntries[1].startTime);
+        document.getElementById('editOut').value = fmtTime(dayEntries[1].endTime);
+      }
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openEditRow(entryId) {
+      editMode = 'row';
+      currentEditEntryId = entryId;
+      const entry = currentEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'block';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Diesen Zeitblock bearbeiten';
+      
+      document.getElementById('editRowIn').value = fmtTime(entry.startTime);
+      document.getElementById('editRowOut').value = entry.endTime ? fmtTime(entry.endTime) : '';
+      document.getElementById('editNote').value = entry.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').classList.remove('active');
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = '';
+      editMode = '';
+      currentEditDateKey = null;
+      currentEditEntryId = null;
+    }
+
+    async function saveEdits() {
+      const enteredPw = document.getElementById('editPassword').value;
+      if (!currentUser || !staffDB[currentUser] || staffDB[currentUser] !== enteredPw) {
+        alert('❌ Falsches Passwort. Änderungen wurden nicht gespeichert.');
+        document.getElementById('editPassword').value = '';
+        return;
+      }
+
+      const note = document.getElementById('editNote').value.trim();
+
+      try {
+        if (editMode === 'day-new') {
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (!inTime || !outTime) {
+            alert('Bitte mindestens Komm- und Gehzeit angeben.');
+            return;
+          }
+
+          const parts = currentEditDateKey.split('-');
+          const baseDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          
+          if (pauseInTime && pauseOutTime) {
+            const start1 = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start1.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end1 = new Date(baseDate);
+            const [h2, m2] = pauseInTime.split(':');
+            end1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start1),
+              endTime: firebase.firestore.Timestamp.fromDate(end1),
+              note: note,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const start2 = new Date(baseDate);
+            const [h3, m3] = pauseOutTime.split(':');
+            start2.setHours(parseInt(h3), parseInt(m3), 0, 0);
+            const end2 = new Date(baseDate);
+            const [h4, m4] = outTime.split(':');
+            end2.setHours(parseInt(h4), parseInt(m4), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start2),
+              endTime: firebase.firestore.Timestamp.fromDate(end2),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            const start = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            end.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start),
+              endTime: firebase.firestore.Timestamp.fromDate(end),
+              note: note,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } 
+        else if (editMode === 'day-1') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (pauseInTime && pauseOutTime) {
+            await updateEntry(dayEntries[0].id, inTime, pauseInTime, note);
+            const baseDate = toDateSafe(dayEntries[0].startTime);
+            const newStart = new Date(baseDate);
+            const [h1, m1] = pauseOutTime.split(':');
+            newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const newEnd = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+            
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(newStart),
+              endTime: firebase.firestore.Timestamp.fromDate(newEnd),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            await updateEntry(dayEntries[0].id, inTime, outTime, note);
+          }
+        } 
+        else if (editMode === 'day-2') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey).sort((a, b) => a.startMs - b.startMs);
+          const inTime = document.getElementById('editIn').value;
+          const pInTime = document.getElementById('editPauseIn').value;
+          const pOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          await updateEntry(dayEntries[0].id, inTime, pInTime, note);
+          await updateEntry(dayEntries[1].id, pOutTime, outTime);
+        } 
+        else if (editMode === 'row') {
+          const inTime = document.getElementById('editRowIn').value;
+          const outTime = document.getElementById('editRowOut').value;
+          await updateEntry(currentEditEntryId, inTime, outTime, note);
+        }
+        
+        closeModal();
+        loadTimesheet(employeeSelect.value);
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
+      }
+    }
+
+    async function updateEntry(id, inStr, outStr, note) {
+      const entry = currentEntries.find(e => e.id === id);
+      if (!entry) return;
+      
+      const baseDate = toDateSafe(entry.startTime);
+      const updateData = {};
+
+      const newStart = new Date(baseDate);
+      const [h1, m1] = inStr.split(':');
+      newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+      updateData.startTime = firebase.firestore.Timestamp.fromDate(newStart);
+
+      if (outStr) {
+        const newEnd = new Date(baseDate);
+        const [h2, m2] = outStr.split(':');
+        newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+        updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+      }
+
+      if (note !== undefined) {
+        updateData.note = note;
+      }
+
+      await db.collection('entries').doc(id).update(updateData);
+    }
+
+    async function exportCurrentMonthPDF() {
+      if (!currentUser) {
+        alert('Bitte zuerst Mitarbeiter auswählen.');
+        return;
+      }
+      
+      exportPdfBtn.disabled = true;
+      const originalText = exportPdfBtn.textContent;
+      exportPdfBtn.textContent = 'Erstelle...';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        
+        const snap = await db.collection('entries')
+          .where('employee', '==', currentUser)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+          
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+        
+        const byDay = {};
+        entries.forEach(e => { 
+          const s = toDateSafe(e.startTime); 
+          if(!s) return; 
+          const key = fmtKey(s); 
+          if(!byDay[key]) byDay[key] = []; 
+          byDay[key].push(e); 
+        });
+        
+        const tableData = []; 
+        let totalMonth = 0;
+        
+        Object.keys(byDay).sort().forEach(dayKey => {
+          const dayEntries = byDay[dayKey];
+          const stats = analyzeDay(dayEntries);
+          const displayedWorkMin = stats.workMin; 
+          totalMonth += displayedWorkMin;
+          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          let outDisplay;
+          if (stats.deficit > 0) {
+            const firstIn = toDateSafe(dayEntries[0].startTime);
+            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
+            outDisplay = fmtTime(adjustedOut);
+          } else {
+            const lastEntry = dayEntries[dayEntries.length-1];
+            outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
+          }
+          
+          const noteText = dayEntries.find(e => e.note)?.note || '';
+          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
+          
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
+        });
+        
+        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+        
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF();
+        doc.setFontSize(16); 
+        doc.text(`Arbeitszeitnachweis (Laufend): ${currentUser}`, 14, 20);
+        doc.setFontSize(10); 
+        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+        
+        doc.autoTable({ 
+          startY: 35, 
+          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], 
+          body: tableData, 
+          theme: 'grid', 
+          headStyles: { fillColor: [5, 150, 105] }, 
+          styles: { fontSize: 9, cellPadding: 3 }, 
+          columnStyles: { 0: {cellWidth: 25}, 1: {cellWidth: 20}, 2: {cellWidth: 20}, 3: {cellWidth: 20}, 4: {cellWidth: 25}, 5: {cellWidth: 50} }, 
+          didDrawPage: function(data) { 
+            if (data.pageNumber === doc.internal.getNumberOfPages()) { 
+              const finalY = data.cursor.y + 10; 
+              doc.setLineWidth(0.5); 
+              doc.line(14, finalY, 90, finalY); 
+              doc.line(100, finalY, 180, finalY); 
+              doc.setFontSize(9); 
+              doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); 
+              doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); 
+              doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); 
+            } 
+          } 
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const filename = `Zeiten_Laufend_${currentUser}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; 
+        doc.save(filename);
+        
+      } catch(e) { 
+        console.error("Export error:", e); 
+        alert("Export-Fehler: " + e.message); 
+      } finally {
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.textContent = originalText;
+      }
+    }
+
+    employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
+    loadColors();
+    loadStaff();
+  </script>
+</body>
+</html>
