@@ -495,7 +495,7 @@
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
           
-          // NEU: Notiz für die Hinweis-Spalte extrahieren
+          // Notiz für die Hinweis-Spalte extrahieren
           const noteText = dayEntries.find(e => e.note)?.note || '';
           const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
           
@@ -551,7 +551,7 @@
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
           
-          // NEU: Notiz für die Hinweis-Spalte extrahieren
+          // Notiz für die Hinweis-Spalte extrahieren
           const noteText = dayEntries.find(e => e.note)?.note || '';
           const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
           
