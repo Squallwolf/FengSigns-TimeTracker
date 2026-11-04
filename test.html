@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <title>Stundenzettel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #006060 0%, #096969 100%); 
+            min-height: 100vh; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
+
+        .container { 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
+            padding: 20px; 
+            max-width: 650px; 
+            width: 100%; 
+            margin: 20px 0 10px 0; 
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h1 { 
+            text-align: left; 
+            font-size: 1.4rem; 
+            color: #333; 
+            margin: 0;
+        }
+
+        .open-menu-btn { 
+            background: #000; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease; 
+        }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        .menu-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            display: none; 
+            z-index: 2000; 
+        }
+        .menu-overlay.active { display: block; }
+        
+        .side-menu { 
+            position: fixed; 
+            top: 0; 
+            left: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); 
+            z-index: 2001; 
+            transition: left 0.3s ease; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            overflow-y: auto; 
+        }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { 
+            align-self: flex-end; 
+            background: none; 
+            border: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: #333; 
+        }
+        .side-menu h2 { 
+            font-size: 1.2rem; 
+            margin-bottom: 10px; 
+            color: #333; 
+            border-bottom: 2px solid #eee; 
+            padding-bottom: 5px; 
+        }
+        
+        .side-menu .nav-btn { 
+            padding: 12px; 
+            border: 1px solid #000; 
+            background: #000; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-align: center; 
+            text-decoration: none; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            transition: all 0.3s ease; 
+            display: block; 
+        }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        select { 
+            flex: 1; 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            background: #f9f9f9; 
+            color: #333;
+        }
+        .action-btn { 
+            padding: 10px 15px; 
+            background: #059669; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            white-space: nowrap; 
+            transition: all 0.3s ease; 
+        }
+        .action-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        .action-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 550px; }
+        th { 
+            background: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-align: left; 
+            padding: 8px 6px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            border-bottom: 2px solid #cbd5e1; 
+            white-space: nowrap; 
+        }
+        td { padding: 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; vertical-align: top; }
+        tr:last-child td { border-bottom: none; }
+        .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
+        .duration-cell { text-align: right; color: #64748b; }
+        .empty-day { color: #94a3b8; font-style: italic; text-align: center; padding: 20px; }
+        
+        .edit-btn { background: #fbbf24; color: #1f2937; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .edit-btn:hover { background: #f59e0b; }
+        
+        .loading { text-align: center; padding: 20px; color: #64748b; }
+        .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .modal-field input { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+        .modal-btn.save { background: #667eea; color: white; }
+        .modal-btn.cancel { background: #e0e0e0; color: #333; }
+        
+        /* Neues Styling für Notiz-Anzeige */
+        .note-display { 
+            font-size: 0.75rem; 
+            color: #64748b; 
+            font-style: italic; 
+            margin-top: 4px; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            word-break: break-word;
+        }
+    </style>
+    
+    <!-- PDF Export Bibliotheken -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+  <!-- Seitenmenü -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
+    <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
+  </div>
+
+  <div class="container">
+    <div class="header-row">
+      <h1>📅 Stundenzettel (Laufender Monat)</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
+    
+    <div class="controls">
+      <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
+      <button id="exportPdfBtn" class="action-btn" onclick="exportCurrentMonthPDF()" disabled>📄 PDF Export</button>
+    </div>
+
+    <div id="errorMsg" class="error"></div>
+    <div id="tableContainer" class="table-wrapper">
+      <div class="loading">Bitte Mitarbeiter auswählen...</div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Zeiten bearbeiten</div>
+      
+      <div id="dayEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Kommen (In)</label>
+          <input type="time" id="editIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Start</label>
+          <input type="time" id="editPauseIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Ende</label>
+          <input type="time" id="editPauseOut">
+        </div>
+        <div class="modal-field">
+          <label>Gehen (Out)</label>
+          <input type="time" id="editOut">
+        </div>
+      </div>
+
+      <div id="rowEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Beginn (dieser Block)</label>
+          <input type="time" id="editRowIn">
+        </div>
+        <div class="modal-field">
+          <label>Ende (dieser Block)</label>
+          <input type="time" id="editRowOut">
+        </div>
+      </div>
+
+      <!-- NEU: Notiz-Feld (gilt für den bearbeiteten Block / Tag) -->
+      <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+        <label>📝 Notiz (optional)</label>
+        <input type="text" id="editNote" placeholder="z.B. Überstunden, Krank, Baustelle XY" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; color: #333;">
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px;">
+        <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
+        <input type="password" id="editPassword" placeholder="••••••" style="border-color: #fca5a5;">
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
+        <button class="modal-btn save" onclick="saveEdits()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let staffDB = {};
+    let currentEntries = [];
+    let currentUser = null;
+    const employeeSelect = document.getElementById('employeeSelect');
+    const tableContainer = document.getElementById('tableContainer');
+    const errorMsg = document.getElementById('errorMsg');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+
+    /* Seitenmenü Toggle-Logik */
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    /* Dynamische Farben & Hintergrund aus colors.json laden */
+    async function loadColors() {
+      try {
+        const res = await fetch('colors.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const colors = await res.json();
+        
+        if (colors.timesheet) {
+          document.body.style.background = colors.timesheet;
+        } else if (colors.background) {
+          document.body.style.background = colors.background;
+        } else if (colors.bgGradientStart && colors.bgGradientEnd) {
+          document.body.style.background = `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`;
+        }
+
+        document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
+          const key = btn.getAttribute('data-color-key');
+          if (colors[key]) {
+            btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
+            btn.style.color = '#ffffff';
+          }
+        });
+      } catch (e) {
+        console.warn('colors.json konnte nicht geladen werden, verwende Failsafe.', e);
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.style.backgroundColor = '#000000';
+          btn.style.borderColor = '#000000';
+          btn.style.color = '#ffffff';
+        });
+        openMenuBtn.style.backgroundColor = '#000000';
+        openMenuBtn.style.color = '#ffffff';
+      }
+    }
+
+    function isEditable(dateKey) {
+      const parts = dateKey.split('-');
+      const entryDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      entryDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffTime = today - entryDate;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 2;
+    }
+
+    async function loadStaff() {
+      try {
+        const res = await fetch('staff.json');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        staffDB = await res.json();
+        const names = Object.keys(staffDB);
+        employeeSelect.innerHTML = '<option value="">-- Bitte wählen --</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+        
+        const savedUser = localStorage.getItem('tz_user');
+        if (savedUser && names.includes(savedUser)) {
+          employeeSelect.value = savedUser;
+          loadTimesheet(savedUser);
+        }
+      } catch (e) {
+        showError('Mitarbeiter-Daten nicht ladbar.');
+      }
+    }
+
+    function toDateSafe(val) {
+      if (!val) return null;
+      if (val.toDate) return val.toDate();
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
+    }
+
+    function fmtDateShort(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
+    }
+
+    function fmtDate(d) { 
+      const date = toDateSafe(d); 
+      return date ? date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) : ''; 
+    }
+
+    function fmtTime(val) {
+      const d = toDateSafe(val);
+      return d ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '-';
+    }
+
+    function fmtDur(mins) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}min`;
+    }
+
+    function fmtKey(d) {
+      const date = toDateSafe(d); 
+      return date ? date.toISOString().slice(0, 10) : ''; 
+    }
+
+    function msToMin(ms) { return Math.floor(ms / 60000); }
+
+    function getRequiredBreak(workMinutes) { 
+      if (workMinutes >= 540) return 45; 
+      if (workMinutes >= 360) return 30; 
+      return 0; 
+    }
+
+    function analyzeDay(entries) {
+      let workMin = 0, breakMin = 0;
+      for(let i = 0; i < entries.length; i++) {
+        const s = toDateSafe(entries[i].startTime), e = toDateSafe(entries[i].endTime);
+        if(!s || !e) continue; workMin += msToMin(e - s);
+      }
+      const sorted = [...entries].sort((a, b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+      for(let i = 0; i < sorted.length - 1; i++) {
+        const endOfThis = toDateSafe(sorted[i].endTime), startOfNext = toDateSafe(sorted[i+1].startTime);
+        if(endOfThis && startOfNext) breakMin += msToMin(startOfNext - endOfThis);
+      }
+      const req = getRequiredBreak(workMin);
+      return { workMin, breakMin, req, deficit: Math.max(0, req - breakMin) };
+    }
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      tableContainer.innerHTML = '';
+    }
+
+    async function loadTimesheet(user) {
+      if (!user) {
+        tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
+        exportPdfBtn.disabled = true;
+        return;
+      }
+      currentUser = user;
+      exportPdfBtn.disabled = false;
+      localStorage.setItem('tz_user', user);
+      tableContainer.innerHTML = '<div class="loading">Lade Daten...</div>';
+      errorMsg.style.display = 'none';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+
+        if (snap.empty) {
+          tableContainer.innerHTML = '<div class="empty-day">Keine Einträge in diesem Monat.</div>';
+          return;
+        }
+
+        currentEntries = [];
+        const byDay = {};
+        let hasComplexDays = false;
+
+        snap.forEach(doc => {
+          const data = doc.data();
+          const start = toDateSafe(data.startTime);
+          if (!start) return;
+          const dateKey = start.toISOString().slice(0, 10);
+          
+          const entry = {
+            id: doc.id,
+            employee: data.employee,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            note: data.note || '', // NEU: Notiz laden
+            startMs: start.getTime(),
+            endMs: data.endTime ? toDateSafe(data.endTime).getTime() : start.getTime()
+          };
+          
+          currentEntries.push(entry);
+          if (!byDay[dateKey]) byDay[dateKey] = [];
+          byDay[dateKey].push(entry);
+        });
+
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(now);
+          d.setDate(now.getDate() - i);
+          if (d >= monthStart) {
+            const dateKey = d.toISOString().slice(0, 10);
+            if (!byDay[dateKey]) byDay[dateKey] = [];
+          }
+        }
+
+        for (const key in byDay) {
+          if (byDay[key].length >= 3) {
+            hasComplexDays = true;
+            break;
+          }
+        }
+
+        let headerHtml = '';
+        if (hasComplexDays) {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:20%">Von</th>
+            <th style="width:20%">Bis</th>
+            <th style="width:15%">Dauer</th>
+            <th style="width:15%; text-align:right;">Gesamt</th>
+            <th style="width:18%; text-align:center;">Aktion</th>
+          </tr>`;
+        } else {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:15%">In</th>
+            <th style="width:15%">Pause In</th>
+            <th style="width:15%">Pause Out</th>
+            <th style="width:15%">Out</th>
+            <th style="width:15%; text-align:right;">Stunden</th>
+            <th style="width:13%; text-align:center;">Aktion</th>
+          </tr>`;
+        }
+
+        let html = `<table><thead>${headerHtml}</thead><tbody>`;
+        const sortedDays = Object.keys(byDay).sort();
+
+        for (const dateKey of sortedDays) {
+          const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
+          const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
+          const canEdit = isEditable(dateKey);
+
+          if (entries.length === 0) {
+            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">➕</button>` : '';
+            if (hasComplexDays) {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td colspan="4" class="empty-day" style="padding: 6px; text-align: center;">Keine Einträge</td>
+                <td style="text-align: center;">${editBtn}</td>
+              </tr>`;
+            } else {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td class="total-cell">0min</td>
+                <td style="text-align: center;">${editBtn}</td>
+              </tr>`;
+            }
+          } else if (hasComplexDays) {
+            if (entries.length <= 2) {
+              const d1 = entries[0];
+              const d2 = entries[1] || null;
+              const inTime = fmtTime(d1.startTime);
+              const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+              const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+              // NEU: Notiz-Anzeige für den Tag
+              const noteDisplay = (d1.note || (d2 && d2.note)) ? `<div class="note-display">📝 ${d1.note || d2.note}</div>` : '';
+              
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>${inTime}</td>
+                <td>${outTime}</td>
+                <td class="duration-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td style="text-align: center;">${editBtn}${noteDisplay}</td>
+              </tr>`;
+            } else {
+              entries.forEach((entry, index) => {
+                const isLast = index === entries.length - 1;
+                const tag = index === 0 ? fmtDateShort(dateKey) : '';
+                const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
+                const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
+                const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button>` : '';
+                // NEU: Notiz-Anzeige direkt unter der Uhrzeit des Blocks
+                const noteDisplay = entry.note ? `<div class="note-display">📝 ${entry.note}</div>` : '';
+                
+                html += `<tr>
+                  <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+                  <td>${fmtTime(entry.startTime)}${noteDisplay}</td>
+                  <td>${fmtTime(entry.endTime)}</td>
+                  <td class="duration-cell">${fmtDur(blockMin)}</td>
+                  <td class="total-cell">${totalDur}</td>
+                  <td style="text-align: center;">${editBtn}</td>
+                </tr>`;
+              });
+            }
+          } else {
+            const d1 = entries[0];
+            const d2 = entries[1] || null;
+            const inTime = fmtTime(d1.startTime);
+            const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
+            const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
+            const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+            // NEU: Notiz-Anzeige
+            const noteDisplay = (d1.note || (d2 && d2.note)) ? `<div class="note-display">📝 ${d1.note || d2.note}</div>` : '';
+            
+            html += `<tr>
+              <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+              <td>${inTime}</td>
+              <td>${pauseIn}</td>
+              <td>${pauseOut}</td>
+              <td>${outTime}</td>
+              <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+              <td style="text-align: center;">${editBtn}${noteDisplay}</td>
+            </tr>`;
+          }
+        }
+
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+
+      } catch (e) {
+        console.error(e);
+        showError('Fehler beim Laden: ' + e.message);
+      }
+    }
+
+    let editMode = '';
+    let currentEditDateKey = null;
+    let currentEditEntryId = null;
+
+    function openEditDay(dateKey) {
+      currentEditDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
+      
+      document.getElementById('dayEditFields').style.display = 'block';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+
+      // NEU: Bestehende Notiz laden (vom ersten Block des Tages)
+      document.getElementById('editNote').value = (dayEntries.length > 0 && dayEntries[0].note) ? dayEntries[0].note : '';
+
+      if (dayEntries.length === 0) {
+        editMode = 'day-new';
+        document.getElementById('modalTitle').textContent = 'Neuen Eintrag hinzufügen';
+        document.getElementById('editIn').value = '08:00';
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = '17:00';
+      } else if (dayEntries.length === 1) {
+        editMode = 'day-1';
+        document.getElementById('modalTitle').textContent = 'Eintrag bearbeiten (Pause nachtragen möglich)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = fmtTime(dayEntries[0].endTime);
+      } else {
+        editMode = 'day-2';
+        document.getElementById('modalTitle').textContent = 'Tageszeiten bearbeiten (2 Blöcke)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = fmtTime(dayEntries[0].endTime);
+        document.getElementById('editPauseOut').value = fmtTime(dayEntries[1].startTime);
+        document.getElementById('editOut').value = fmtTime(dayEntries[1].endTime);
+      }
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openEditRow(entryId) {
+      editMode = 'row';
+      currentEditEntryId = entryId;
+      const entry = currentEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'block';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Diesen Zeitblock bearbeiten';
+      
+      document.getElementById('editRowIn').value = fmtTime(entry.startTime);
+      document.getElementById('editRowOut').value = entry.endTime ? fmtTime(entry.endTime) : '';
+      
+      // NEU: Bestehende Notiz des Blocks laden
+      document.getElementById('editNote').value = entry.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').classList.remove('active');
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = ''; // NEU: Zurücksetzen
+      editMode = '';
+      currentEditDateKey = null;
+      currentEditEntryId = null;
+    }
+
+    async function saveEdits() {
+      const enteredPw = document.getElementById('editPassword').value;
+      if (!currentUser || !staffDB[currentUser] || staffDB[currentUser] !== enteredPw) {
+        alert('❌ Falsches Passwort. Änderungen wurden nicht gespeichert.');
+        document.getElementById('editPassword').value = '';
+        return;
+      }
+
+      // NEU: Notiz-Wert auslesen
+      const note = document.getElementById('editNote').value.trim();
+
+      try {
+        if (editMode === 'day-new') {
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (!inTime || !outTime) {
+            alert('Bitte mindestens Komm- und Gehzeit angeben.');
+            return;
+          }
+
+          const parts = currentEditDateKey.split('-');
+          const baseDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          
+          if (pauseInTime && pauseOutTime) {
+            const start1 = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start1.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end1 = new Date(baseDate);
+            const [h2, m2] = pauseInTime.split(':');
+            end1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start1),
+              endTime: firebase.firestore.Timestamp.fromDate(end1),
+              note: note, // NEU
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const start2 = new Date(baseDate);
+            const [h3, m3] = pauseOutTime.split(':');
+            start2.setHours(parseInt(h3), parseInt(m3), 0, 0);
+            const end2 = new Date(baseDate);
+            const [h4, m4] = outTime.split(':');
+            end2.setHours(parseInt(h4), parseInt(m4), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start2),
+              endTime: firebase.firestore.Timestamp.fromDate(end2),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            const start = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            end.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start),
+              endTime: firebase.firestore.Timestamp.fromDate(end),
+              note: note, // NEU
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } 
+        else if (editMode === 'day-1') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (pauseInTime && pauseOutTime) {
+            await updateEntry(dayEntries[0].id, inTime, pauseInTime, note); // NEU: note übergeben
+            const baseDate = toDateSafe(dayEntries[0].startTime);
+            const newStart = new Date(baseDate);
+            const [h1, m1] = pauseOutTime.split(':');
+            newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const newEnd = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+            
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(newStart),
+              endTime: firebase.firestore.Timestamp.fromDate(newEnd),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            await updateEntry(dayEntries[0].id, inTime, outTime, note); // NEU: note übergeben
+          }
+        } 
+        else if (editMode === 'day-2') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey).sort((a, b) => a.startMs - b.startMs);
+          const inTime = document.getElementById('editIn').value;
+          const pInTime = document.getElementById('editPauseIn').value;
+          const pOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          // Hinweis: Bei 2 Blöcken wird die Notiz dem ersten Block zugewiesen. 
+          // Für eine Notiz im zweiten Block sollte der Nutzer den einzelnen Block über "✏️" bearbeiten.
+          await updateEntry(dayEntries[0].id, inTime, pInTime, note);
+          await updateEntry(dayEntries[1].id, pOutTime, outTime); // note weggelassen, damit bestehende Notiz des 2. Blocks nicht überschrieben wird
+        } 
+        else if (editMode === 'row') {
+          const inTime = document.getElementById('editRowIn').value;
+          const outTime = document.getElementById('editRowOut').value;
+          await updateEntry(currentEditEntryId, inTime, outTime, note); // NEU: note übergeben
+        }
+        
+        closeModal();
+        loadTimesheet(employeeSelect.value);
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
+      }
+    }
+
+    // NEU: 'note' Parameter hinzugefügt
+    async function updateEntry(id, inStr, outStr, note) {
+      const entry = currentEntries.find(e => e.id === id);
+      if (!entry) return;
+      
+      const baseDate = toDateSafe(entry.startTime);
+      const updateData = {};
+
+      const newStart = new Date(baseDate);
+      const [h1, m1] = inStr.split(':');
+      newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+      updateData.startTime = firebase.firestore.Timestamp.fromDate(newStart);
+
+      if (outStr) {
+        const newEnd = new Date(baseDate);
+        const [h2, m2] = outStr.split(':');
+        newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+        updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+      }
+
+      // NEU: Notiz nur aktualisieren, wenn der Parameter explizit übergeben wurde (nicht undefined)
+      if (note !== undefined) {
+        updateData.note = note;
+      }
+
+      await db.collection('entries').doc(id).update(updateData);
+    }
+
+    async function exportCurrentMonthPDF() {
+      if (!currentUser) {
+        alert('Bitte zuerst Mitarbeiter auswählen.');
+        return;
+      }
+      
+      exportPdfBtn.disabled = true;
+      const originalText = exportPdfBtn.textContent;
+      exportPdfBtn.textContent = 'Erstelle...';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        
+        const snap = await db.collection('entries')
+          .where('employee', '==', currentUser)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+          
+        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
+        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
+        
+        const byDay = {};
+        entries.forEach(e => { 
+          const s = toDateSafe(e.startTime); 
+          if(!s) return; 
+          const key = fmtKey(s); 
+          if(!byDay[key]) byDay[key] = []; 
+          byDay[key].push(e); 
+        });
+        
+        const tableData = []; 
+        let totalMonth = 0;
+        
+        Object.keys(byDay).sort().forEach(dayKey => {
+          const dayEntries = byDay[dayKey];
+          const stats = analyzeDay(dayEntries);
+          const displayedWorkMin = stats.workMin; 
+          totalMonth += displayedWorkMin;
+          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
+          let outDisplay;
+          if (stats.deficit > 0) {
+            const firstIn = toDateSafe(dayEntries[0].startTime);
+            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
+            outDisplay = fmtTime(adjustedOut);
+          } else {
+            const lastEntry = dayEntries[dayEntries.length-1];
+            outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
+          }
+          
+          // NEU: Notiz in PDF exportieren, falls vorhanden
+          const noteText = dayEntries.find(e => e.note)?.note || '';
+          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
+          
+          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
+        });
+        
+        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
+        
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF();
+        doc.setFontSize(16); 
+        doc.text(`Arbeitszeitnachweis (Laufend): ${currentUser}`, 14, 20);
+        doc.setFontSize(10); 
+        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+        
+        doc.autoTable({ 
+          startY: 35, 
+          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], 
+          body: tableData, 
+          theme: 'grid', 
+          headStyles: { fillColor: [5, 150, 105] }, 
+          styles: { fontSize: 9, cellPadding: 3 }, 
+          columnStyles: { 0: {cellWidth: 25}, 1: {cellWidth: 20}, 2: {cellWidth: 20}, 3: {cellWidth: 20}, 4: {cellWidth: 25}, 5: {cellWidth: 50} }, 
+          didDrawPage: function(data) { 
+            if (data.pageNumber === doc.internal.getNumberOfPages()) { 
+              const finalY = data.cursor.y + 10; 
+              doc.setLineWidth(0.5); 
+              doc.line(14, finalY, 90, finalY); 
+              doc.line(100, finalY, 180, finalY); 
+              doc.setFontSize(9); 
+              doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); 
+              doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); 
+              doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); 
+            } 
+          } 
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const filename = `Zeiten_Laufend_${currentUser}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; 
+        doc.save(filename);
+        
+      } catch(e) { 
+        console.error("Export error:", e); 
+        alert("Export-Fehler: " + e.message); 
+      } finally {
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.textContent = originalText;
+      }
+    }
+
+    employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
+    loadColors();
+    loadStaff();
+  </script>
+</body>
+</html>
