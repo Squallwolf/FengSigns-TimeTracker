@@ -1,359 +1,444 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Zeiterfassung</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    /* Fallback-Hintergrund, wird durch colors.json überschrieben */
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #008080; min-height: 100vh; padding: 10px; display: flex; justify-content: center; align-items: flex-start; }
-    .container { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); padding: 20px; max-width: 420px; width: 100%; margin: 10px 0; position: relative; }
-    
-    /* === HEADER & MENU BUTTON === */
-    .header-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
-    h1 { font-size: 1.5rem; color: #333; margin: 0; }
-    .menu-toggle { background: #667eea; color: white; border: none; outline: none; font-size: 1.2rem; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: background 0.2s ease; }
-    .menu-toggle:hover { background: #5a67d8; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
+    <title>Stundenzettel</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #006060 0%, #096969 100%); 
+            min-height: 100vh; 
+            padding: 10px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: flex-start;
+            transition: background 0.3s ease;
+        }
 
-    /* === SIDE MENU & OVERLAY === */
-    .sidebar-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.4); opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 998; }
-    .sidebar-overlay.active { opacity: 1; visibility: visible; }
+        .container { 
+            background: white; 
+            border-radius: 15px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); 
+            padding: 20px; 
+            max-width: 650px; 
+            width: 100%; 
+            margin: 20px 0 10px 0; 
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        h1 { 
+            text-align: left; 
+            font-size: 1.4rem; 
+            color: #333; 
+            margin: 0;
+        }
+
+        .open-menu-btn { 
+            background: #000; 
+            color: #fff; 
+            border: none; 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 1.1rem; 
+            transition: all 0.3s ease; 
+        }
+        .open-menu-btn:hover { opacity: 0.85; }
+
+        .menu-overlay { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.5); 
+            display: none; 
+            z-index: 2000; 
+        }
+        .menu-overlay.active { display: block; }
+        
+        .side-menu { 
+            position: fixed; 
+            top: 0; 
+            left: -280px; 
+            width: 280px; 
+            height: 100%; 
+            background: white; 
+            box-shadow: 2px 0 10px rgba(0,0,0,0.2); 
+            z-index: 2001; 
+            transition: left 0.3s ease; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 15px; 
+            overflow-y: auto; 
+        }
+        .side-menu.active { left: 0; }
+        
+        .side-menu .close-btn { 
+            align-self: flex-end; 
+            background: none; 
+            border: none; 
+            font-size: 1.5rem; 
+            cursor: pointer; 
+            color: #333; 
+        }
+        .side-menu h2 { 
+            font-size: 1.2rem; 
+            margin-bottom: 10px; 
+            color: #333; 
+            border-bottom: 2px solid #eee; 
+            padding-bottom: 5px; 
+        }
+        
+        .side-menu .nav-btn { 
+            padding: 12px; 
+            border: 1px solid #000; 
+            background: #000; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            text-align: center; 
+            text-decoration: none; 
+            color: #fff; 
+            font-size: 0.95rem; 
+            transition: all 0.3s ease; 
+            display: block; 
+        }
+        .side-menu .nav-btn:hover { opacity: 0.85; }
+
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+        select { 
+            flex: 1; 
+            padding: 10px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 8px; 
+            font-size: 0.95rem; 
+            background: #f9f9f9; 
+            color: #333;
+        }
+        .action-btn { 
+            padding: 10px 15px; 
+            background: #059669; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-size: 0.9rem; 
+            white-space: nowrap; 
+            transition: all 0.3s ease; 
+        }
+        .action-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3); }
+        .action-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        
+        .table-wrapper { overflow-x: auto; border-radius: 8px; border: 1px solid #e0e0e0; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; min-width: 550px; }
+        th { 
+            background: #f1f5f9; 
+            color: #475569; 
+            font-weight: 600; 
+            text-align: left; 
+            padding: 8px 6px; 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            border-bottom: 2px solid #cbd5e1; 
+            white-space: nowrap; 
+        }
+        td { padding: 8px 6px; border-bottom: 1px solid #f1f5f9; color: #334155; font-family: ui-monospace, monospace; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        .total-cell { font-weight: 700; color: #059669; text-align: right; padding-right: 10px; }
+        .duration-cell { text-align: right; color: #64748b; }
+        .empty-day { color: #94a3b8; font-style: italic; text-align: center; padding: 20px; }
+        
+        .edit-btn { background: #fbbf24; color: #1f2937; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .edit-btn:hover { background: #f59e0b; }
+        
+        .loading { text-align: center; padding: 20px; color: #64748b; }
+        .error { text-align: center; padding: 15px; background: #fef2f2; color: #dc2626; border-radius: 8px; margin-top: 10px; display: none; }
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; color: #333; border-radius: 12px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .modal-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 15px; color: #333; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .modal-field input { width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; background: #fff; color: #333; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+        .modal-btn { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+        .modal-btn.save { background: #667eea; color: white; }
+        .modal-btn.cancel { background: #e0e0e0; color: #333; }
+        
+        .note-row td {
+            background-color: #f8fafc;
+            padding: 8px 12px !important;
+            border-top: 1px solid #e2e8f0;
+            border-left: 3px solid #667eea;
+            font-size: 0.85rem;
+            color: #475569;
+            font-style: italic;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+
+        /* NEU: Stil für die Fristablauf-Warnung im Modal */
+        .deadline-warning {
+            background-color: #fef2f2;
+            color: #dc2626;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            border: 1px solid #fecaca;
+            display: none;
+        }
+    </style>
     
-    .sidebar { position: fixed; top: 0; left: -280px; width: 280px; height: 100%; background: #ffffff; box-shadow: 4px 0 15px rgba(0, 0, 0, 0.2); z-index: 999; transition: left 0.3s ease; padding: 20px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-    .sidebar.open { left: 0; }
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     
-    .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
-    .sidebar-header h2 { font-size: 1.2rem; color: #333; }
-    .close-menu { background: transparent; border: none; font-size: 1.5rem; cursor: pointer; color: #888; }
-    .close-menu:hover { color: #333; }
-
-    /* Dynamische Navigations-Buttons */
-    .nav-btn { padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; text-align: center; text-decoration: none; font-size: 0.95rem; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; width: 100%; color: #ffffff; }
-    .nav-btn:hover { transform: translateY(-1px); filter: brightness(0.95); box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); }
-
-    /* Export Grid (Page Level) */
-    .export-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem; }
-    .export-wrapper { position: relative; width: 100%; }
-    
-    .export-btn { width: 100%; padding: 0; border: 2px solid #667eea; background: white; color: #667eea; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 0.85rem; display: flex; align-items: stretch; transition: all 0.2s ease; overflow: hidden; text-align: left; }
-    .export-btn:hover { box-shadow: 0 4px 8px rgba(102, 126, 234, 0.2); }
-    
-    .export-main { flex: 1; padding: 10px; display: flex; align-items: center; }
-    .export-main:hover { background: #667eea; color: white; }
-
-    .export-arrow { display: flex; align-items: center; justify-content: center; padding: 0 12px; font-size: 0.8rem; border-left: 2px solid #667eea; transition: transform 0.2s, background 0.2s; background: rgba(102, 126, 234, 0.05); }
-    .export-arrow:hover { background: #667eea; color: white; }
-
-    .export-btn.current-month { border-color: #059669; color: #059669; }
-    .export-btn.current-month .export-main:hover { background: #059669; color: white; }
-    .export-btn.current-month .export-arrow { border-left-color: #059669; background: rgba(5, 150, 105, 0.05); }
-    .export-btn.current-month .export-arrow:hover { background: #059669; color: white; }
-
-    .export-arrow.open { transform: rotate(180deg); }
-    .export-dropdown { position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 2px solid #667eea; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; display: none; }
-    .export-dropdown.current-month-dropdown { border-color: #059669; }
-    .export-dropdown.show { display: block; }
-    .export-option { padding: 10px 14px; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid #eee; transition: background 0.2s; }
-    .export-option:last-child { border-bottom: none; }
-    .export-option:hover { background: #e8ebf9; }
-    .export-dropdown.current-month-dropdown .export-option:hover { background: #e6f4ea; }
-    .export-option.active { background: #667eea; color: #fff; font-weight: 600; }
-    .export-dropdown.current-month-dropdown .export-option.active { background: #059669; color: #fff; }
-
-    .row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
-    .row label { margin: 0; white-space: nowrap; font-weight: 600; font-size: 0.9rem; color: #444; }
-    .row select { flex: 1; padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: 2px solid #e0e0e0; background: #f9f9f9; transition: all 0.3s ease; }
-    .row select:focus { outline: none; border-color: #667eea; background: white; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
-    .row button { padding: 10px 12px; font-size: 0.95rem; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; white-space: nowrap; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; transition: all 0.3s ease; }
-    .row button:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3); }
-    .stamp-btn.check-out { background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); }
-    .stamp-btn:disabled { background: #94a3b8; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-    #status { text-align: center; margin: 0.5rem 0; min-height: 1.2em; color: #4b5563; font-size: 0.9rem; }
-    #errorMsg { color: #dc2626; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fef2f2; padding: 6px; border-radius: 6px; border: 1px solid #fecaca; display: none; }
-    #warningMsg { color: #b45309; font-size: 0.85rem; text-align: center; margin: 0.5rem 0; background: #fff7ed; padding: 6px; border-radius: 6px; border: 1px solid #fed7aa; display: none; }
-    .entries h3 { margin: 1rem 0 0.5rem; font-size: 1rem; color: #333; }
-    .day-group { padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-    .day-header { font-weight: 600; color: #374151; margin-bottom: 0.25rem; display: flex; justify-content: space-between; align-items: center; }
-    .day-total { font-size: 0.85rem; font-weight: 500; color: #059669; }
-    .time-row { display: flex; align-items: center; gap: 0.25rem; margin: 0.1rem 0; font-size: 0.85rem; }
-    .time-label { color: #6b7280; width: 24px; }
-    .time-val { font-family: ui-monospace, monospace; font-weight: 500; flex: 1; }
-    .corr-btn { background: #fbbf24; color: #1f2937; border: none; padding: 2px 4px; border-radius: 3px; font-size: 0.7rem; cursor: pointer; min-width: 20px; transition: background 0.2s; }
-    .corr-btn:hover { background: #f59e0b; }
-    .break-info { font-size: 0.8rem; color: #059669; margin: 0.2rem 0 0.2rem 24px; }
-    .break-warning { font-size: 0.8rem; color: #dc2626; margin: 0.2rem 0 0.2rem 24px; }
-    .note { color: #6b7280; font-size: 0.8rem; margin-left: 24px; }
-    .loading { color: #888; font-size: 0.85rem; text-align: center; padding: 1rem; }
-    #debug { font-size: 0.7rem; color: #666; margin-top: 1rem; border-top: 1px solid #eee; padding-top: 0.5rem; display: none; }
-    
-    @media (max-width: 500px) { 
-      .container { padding: 15px; } 
-      .export-grid { grid-template-columns: 1fr; }
-      .row { flex-wrap: wrap; } 
-      .row label { width: 100%; margin-bottom: 0.25rem; } 
-    }
-  </style>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
-  <!-- Overlay Backdrop -->
-  <div id="sidebarOverlay" class="sidebar-overlay"></div>
-
-  <!-- Side Navigation Menu -->
-  <aside id="sidebar" class="sidebar">
-    <div class="sidebar-header">
-      <h2>Navigation</h2>
-      <button id="closeMenuBtn" class="close-menu">&times;</button>
-    </div>
-    
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <div class="side-menu" id="sideMenu">
+    <button class="close-btn" id="closeMenuBtn">&times;</button>
+    <h2>Menü</h2>
+    <a href="index.html" class="nav-btn" data-color-key="zeiterfassung">Zeiterfassung</a>
     <a href="storage.html" class="nav-btn" data-color-key="lager">Lager</a>
-    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
-    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
-    <a href="https://squallwolf.github.io/FengSigns-TimeTracker/timesheet.html" class="nav-btn" data-color-key="timesheet">Time Sheet</a>
-  </aside>
-
-  <div class="container">
-    <div class="header-bar">
-      <h1>Zeiterfassung</h1>
-      <button id="openMenuBtn" class="menu-toggle" aria-label="Navigation öffnen">☰</button>
-    </div>
-
-    <!-- Export Buttons On Main Page -->
-    <div class="export-grid">
-      <!-- Export: Letzter Monat -->
-      <div class="export-wrapper">
-        <button id="exportBtn" class="export-btn" type="button">
-          <span class="export-main">Letzter Monat</span>
-          <span class="export-arrow" id="exportArrow">▼</span>
-        </button>
-        <div class="export-dropdown" id="exportDropdown">
-          <div class="export-option active" data-format="pdf">PDF (Standard)</div>
-          <div class="export-option" data-format="excel">Excel (.xlsx)</div>
-        </div>
-      </div>
-
-      <!-- Export: Dieser Monat -->
-      <div class="export-wrapper">
-        <button id="exportCurrentBtn" class="export-btn current-month" type="button">
-          <span class="export-main">Dieser Monat</span>
-          <span class="export-arrow" id="exportCurrentArrow">▼</span>
-        </button>
-        <div class="export-dropdown current-month-dropdown" id="exportCurrentDropdown">
-          <div class="export-option active" data-format="pdf">PDF (Standard)</div>
-          <div class="export-option" data-format="excel">Excel (.xlsx)</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="row">
-      <label for="employee">Mitarbeiter:</label>
-      <select id="employee"><option value="">-- Bitte wählen --</option></select>
-      <button id="stampBtn" class="stamp-btn" disabled>KOMMEN</button>
-    </div>
-    <div class="row" id="passwordRow">
-      <label for="password">Passwort:</label>
-      <input type="password" id="password" placeholder="••••••" style="flex:1;padding:10px 12px;font-size:0.95rem;border-radius:8px;border:2px solid #e0e0e0;background:#f9f9f9;">
-    </div>
-    <div id="status">Bitte wählen</div>
-    <div id="errorMsg"></div><div id="warningMsg"></div>
-    <div class="row"><label for="rangeFilter">Zeitraum:</label><select id="rangeFilter" style="flex:1"><option value="3">3 Tage</option><option value="7" selected>7 Tage</option><option value="30">30 Tage</option></select></div>
-    <div class="entries"><h3>Einträge</h3><div id="entryList"><div class="loading">Warte auf Auswahl...</div></div></div>
-    <div id="debug"></div>
+    <a href="vouchers.html" class="nav-btn" data-color-key="gutscheine">Gutscheine</a>
+    <a href="inventory.html" class="nav-btn" data-color-key="inventur">Inventur</a>
+    <a href="order.html" class="nav-btn" data-color-key="bestellung">Bestellung</a>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-  <script>
-    const debug = (msg) => { const d = document.getElementById('debug'); if(d) d.innerHTML += `<div>${msg}</div>`; };
-    const showError = (msg) => { const el = document.getElementById('errorMsg'); el.textContent = msg; el.style.display = 'block'; };
-    const showWarning = (msg) => { const el = document.getElementById('warningMsg'); el.textContent = msg; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); };
+  <div class="container">
+    <div class="header-row">
+      <h1>📅 Stundenzettel (Laufender Monat)</h1>
+      <button class="open-menu-btn" id="openMenuBtn">☰</button>
+    </div>
     
+    <div class="controls">
+      <select id="employeeSelect"><option value="">Mitarbeiter wählen...</option></select>
+      <button id="exportPdfBtn" class="action-btn" onclick="exportCurrentMonthPDF()" disabled>📄 PDF Export</button>
+    </div>
+
+    <div id="errorMsg" class="error"></div>
+    <div id="tableContainer" class="table-wrapper">
+      <div class="loading">Bitte Mitarbeiter auswählen...</div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header" id="modalTitle">Zeiten bearbeiten</div>
+      
+      <!-- NEU: Warnhinweis bei abgelaufener Frist -->
+      <div id="deadlineWarning" class="deadline-warning">
+        ⚠️ Die Bearbeitungsfrist für Zeiten ist abgelaufen. Es kann nur noch die Notiz geändert werden.
+      </div>
+
+      <div id="dayEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Kommen (In)</label>
+          <input type="time" id="editIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Start</label>
+          <input type="time" id="editPauseIn">
+        </div>
+        <div class="modal-field">
+          <label>Pause Ende</label>
+          <input type="time" id="editPauseOut">
+        </div>
+        <div class="modal-field">
+          <label>Gehen (Out)</label>
+          <input type="time" id="editOut">
+        </div>
+      </div>
+
+      <div id="rowEditFields" style="display:none;">
+        <div class="modal-field">
+          <label>Beginn (dieser Block)</label>
+          <input type="time" id="editRowIn">
+        </div>
+        <div class="modal-field">
+          <label>Ende (dieser Block)</label>
+          <input type="time" id="editRowOut">
+        </div>
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px;">
+        <label>📝 Notiz (optional)</label>
+        <input type="text" id="editNote" placeholder="z.B. Überstunden, Krank, Baustelle XY" style="width: 100%; padding: 8px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 0.95rem; color: #333;">
+      </div>
+
+      <div class="modal-field" style="margin-top: 15px;">
+        <label style="color: #dc2626;">🔒 Passwort zur Bestätigung</label>
+        <input type="password" id="editPassword" placeholder="••••••" style="border-color: #fca5a5;">
+      </div>
+
+      <div class="modal-buttons">
+        <button class="modal-btn cancel" onclick="closeModal()">Abbrechen</button>
+        <button class="modal-btn save" onclick="saveEdits()">Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let staffDB = {};
+    let currentEntries = [];
+    let currentUser = null;
+    const employeeSelect = document.getElementById('employeeSelect');
+    const tableContainer = document.getElementById('tableContainer');
+    const errorMsg = document.getElementById('errorMsg');
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+
+    const openMenuBtn = document.getElementById('openMenuBtn');
+    const closeMenuBtn = document.getElementById('closeMenuBtn');
+    const sideMenu = document.getElementById('sideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+    }
+
+    openMenuBtn.addEventListener('click', openMenu);
+    closeMenuBtn.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
     async function loadColors() {
       try {
-        const res = await fetch('colors.json');
-        if (!res.ok) throw new Error('colors.json konnte nicht geladen werden');
+        const res = await fetch('colors.json?cb=' + Date.now());
+        if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
         
-        if (colors.zeiterfassung) {
-          document.body.style.backgroundColor = colors.zeiterfassung;
+        if (colors.timesheet) {
+          document.body.style.background = colors.timesheet;
+        } else if (colors.background) {
+          document.body.style.background = colors.background;
+        } else if (colors.bgGradientStart && colors.bgGradientEnd) {
+          document.body.style.background = `linear-gradient(135deg, ${colors.bgGradientStart} 0%, ${colors.bgGradientEnd} 100%)`;
         }
 
         document.querySelectorAll('.nav-btn[data-color-key]').forEach(btn => {
           const key = btn.getAttribute('data-color-key');
           if (colors[key]) {
             btn.style.backgroundColor = colors[key];
+            btn.style.borderColor = colors[key];
             btn.style.color = '#ffffff';
           }
         });
       } catch (e) {
-        console.warn('⚠️ colors.json konnte nicht geladen werden. Failsafe activated (Black & White).', e);
-        document.body.style.backgroundColor = '#ffffff';
+        console.warn('colors.json konnte nicht geladen werden, verwende Failsafe.', e);
         document.querySelectorAll('.nav-btn').forEach(btn => {
           btn.style.backgroundColor = '#000000';
+          btn.style.borderColor = '#000000';
           btn.style.color = '#ffffff';
-          btn.style.border = '1px solid #000000';
         });
-        const menuToggle = document.getElementById('openMenuBtn');
-        if (menuToggle) {
-          menuToggle.style.backgroundColor = '#000000';
-          menuToggle.style.color = '#ffffff';
-        }
+        openMenuBtn.style.backgroundColor = '#000000';
+        openMenuBtn.style.color = '#ffffff';
       }
     }
-    loadColors();
 
-    const firebaseConfig = { apiKey: "AIzaSyDmJJV49Uik0ISYWDMEAoGfWTcgYeyjZs8", authDomain: "fengsigns-timetracker.firebaseapp.com", projectId: "fengsigns-timetracker", storageBucket: "fengsigns-timetracker.firebasestorage.app", messagingSenderId: "1035298719582", appId: "1:1035298719582:web:0fe57c5141a7539b82b1cf" };
-    firebase.initializeApp(firebaseConfig); 
-    const db = firebase.firestore(); 
-    db.settings({ ignoreUndefinedProperties: true });
-    
-    const sel = document.getElementById('employee');
-    const btn = document.getElementById('stampBtn');
-    const status = document.getElementById('status');
-    const errorMsg = document.getElementById('errorMsg');
-    const warningMsg = document.getElementById('warningMsg');
-    const list = document.getElementById('entryList');
-    const rangeFilter = document.getElementById('rangeFilter');
-    
-    const exportBtn = document.getElementById('exportBtn');
-    const exportArrow = document.getElementById('exportArrow');
-    const exportDropdown = document.getElementById('exportDropdown');
-    const exportOptions = exportDropdown.querySelectorAll('.export-option');
-
-    const exportCurrentBtn = document.getElementById('exportCurrentBtn');
-    const exportCurrentArrow = document.getElementById('exportCurrentArrow');
-    const exportCurrentDropdown = document.getElementById('exportCurrentDropdown');
-    const exportCurrentOptions = exportCurrentDropdown.querySelectorAll('.export-option');
-
-    const sidebar = document.getElementById('sidebar');
-    const sidebarOverlay = document.getElementById('sidebarOverlay');
-    const openMenuBtn = document.getElementById('openMenuBtn');
-    const closeMenuBtn = document.getElementById('closeMenuBtn');
-
-    function openSidebar() {
-      sidebar.classList.add('open');
-      sidebarOverlay.classList.add('active');
-    }
-
-    function closeSidebar() {
-      sidebar.classList.remove('open');
-      sidebarOverlay.classList.remove('active');
-    }
-
-    openMenuBtn.addEventListener('click', openSidebar);
-    closeMenuBtn.addEventListener('click', closeSidebar);
-    sidebarOverlay.addEventListener('click', closeSidebar);
-
-    let user = localStorage.getItem('tz_user') || '';
-    let allEntries = [];
-    let selectedFormat = 'pdf';
-    let selectedCurrentFormat = 'pdf';
-    const serverTimestamp = firebase.firestore.FieldValue.serverTimestamp;
-    
-    let staffDB = {};
-    
-    function populateEmployeeDropdown() {
-      const employeeNames = Object.keys(staffDB);
-      sel.innerHTML = '<option value="">-- Bitte wählen --</option>' + 
-                      employeeNames.map(n => `<option value="${n}">${n}</option>`).join('');
-      sel.disabled = false;
-      
-      if (user && employeeNames.includes(user)) { 
-        sel.value = user; 
-        loadUserState(); 
-      }
+    // ÄNDERUNG 1: Bearbeitungsfrist von 3 auf 4 Tage erhöht (<= 3 statt <= 2)
+    function isEditable(dateKey) {
+      const parts = dateKey.split('-');
+      const entryDate = new Date(parts[0], parts[1] - 1, parts[2]);
+      entryDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const diffTime = today - entryDate;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 3; // 0 = heute, 1 = gestern, 2 = vorgestern, 3 = vor 3 Tagen (insgesamt 4 Tage)
     }
 
     async function loadStaff() {
       try {
-        const res = await fetch('staff.json');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const res = await fetch('staff.json?cb=' + Date.now());
+        if (!res.ok) {
+            throw new Error('HTTP Status: ' + res.status + ' (Prüfe, ob staff.json im selben Ordner liegt)');
+        }
         staffDB = await res.json();
-        console.log('✅ Staff geladen:', Object.keys(staffDB).length);
-        populateEmployeeDropdown();
-      } catch (e) { 
-        console.error('❌ staff.json Fehler:', e); 
-        showError('Mitarbeiter-Daten nicht ladbar.'); 
+        const names = Object.keys(staffDB);
+        employeeSelect.innerHTML = '<option value="">-- Bitte wählen --</option>' + names.map(n => `<option value="${n}">${n}</option>`).join('');
+        
+        const savedUser = localStorage.getItem('tz_user');
+        if (savedUser && names.includes(savedUser)) {
+          employeeSelect.value = savedUser;
+          loadTimesheet(savedUser);
+        }
+      } catch (e) {
+        console.error('Fehler beim Laden von staff.json:', e);
+        showError('Mitarbeiter-Daten nicht ladbar. (F12 drücken für Details)');
       }
     }
-    
-    function checkPassword(name, pw) { return staffDB[name] && staffDB[name] === pw; }
-    loadStaff();
-    
-    sel.addEventListener('change', () => {
-      user = sel.value; 
-      localStorage.setItem('tz_user', user);
-      const pwInput = document.getElementById('password'); 
-      if (pwInput) pwInput.value = '';
-      
-      if (user && Object.keys(staffDB).includes(user)) {
-        loadUserState(); 
-      } else { 
-        btn.disabled = true; 
-        status.textContent = "Bitte wählen"; 
-        list.innerHTML = '<div class="loading">Warte...</div>'; 
-      }
-    });
-    
-    rangeFilter.addEventListener('change', () => { if(user) renderList(allEntries); });
-    
-    exportArrow.addEventListener('click', (e) => { e.stopPropagation(); exportDropdown.classList.toggle('show'); exportArrow.classList.toggle('open'); exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); });
-    exportBtn.addEventListener('click', (e) => { if (!e.target.closest('#exportArrow')) exportData(selectedFormat); });
-    exportOptions.forEach(opt => { opt.addEventListener('click', () => { exportOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedFormat = opt.dataset.format; exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }); });
 
-    exportCurrentArrow.addEventListener('click', (e) => { e.stopPropagation(); exportCurrentDropdown.classList.toggle('show'); exportCurrentArrow.classList.toggle('open'); exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); });
-    exportCurrentBtn.addEventListener('click', (e) => { if (!e.target.closest('#exportCurrentArrow')) exportCurrentMonthData(selectedCurrentFormat); });
-    exportCurrentOptions.forEach(opt => { opt.addEventListener('click', () => { exportCurrentOptions.forEach(o => o.classList.remove('active')); opt.classList.add('active'); selectedCurrentFormat = opt.dataset.format; exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }); });
-
-    document.addEventListener('click', (e) => { 
-      if (!exportBtn.contains(e.target) && !exportDropdown.contains(e.target)) { exportDropdown.classList.remove('show'); exportArrow.classList.remove('open'); }
-      if (!exportCurrentBtn.contains(e.target) && !exportCurrentDropdown.contains(e.target)) { exportCurrentDropdown.classList.remove('show'); exportCurrentArrow.classList.remove('open'); }
-    });
-    
     function toDateSafe(val) {
-      if (!val) return null; 
+      if (!val) return null;
       if (val.toDate) return val.toDate();
-      if (val instanceof Date) return val; 
-      const d = new Date(val); 
-      return isNaN(d.getTime()) ? null : d; 
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? null : d;
     }
-    function fmtTime(d) { 
-      const date = toDateSafe(d); 
-      return date ? date.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'}) : '?'; 
+
+    function fmtDateShort(isoString) {
+      const d = new Date(isoString);
+      return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' });
     }
+
     function fmtDate(d) { 
       const date = toDateSafe(d); 
-      return date ? date.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}) : ''; 
+      return date ? date.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' }) : ''; 
     }
+
+    function fmtTime(val) {
+      const d = toDateSafe(val);
+      return d ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '-';
+    }
+
+    function fmtDur(mins) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}min`;
+    }
+
     function fmtKey(d) {
       const date = toDateSafe(d); 
-      return date ? date.toISOString().slice(0,10) : ''; 
+      return date ? date.toISOString().slice(0, 10) : ''; 
     }
-    function msToMin(ms) { return Math.floor(ms/60000); }
-    function fmtDur(mins) {
-      const h=Math.floor(mins/60), m=mins%60; 
-      return h>0?`${h}h ${m}m`:`${m}min`; 
+
+    function msToMin(ms) { return Math.floor(ms / 60000); }
+
+    function getRequiredBreak(workMinutes) { 
+      if (workMinutes >= 540) return 45; 
+      if (workMinutes >= 360) return 30; 
+      return 0; 
     }
-    function inRange(date, days) { 
-      if(!date) return false; 
-      const d = toDateSafe(date);
-      const today = new Date().setHours(0,0,0,0);
-      const cutoff = new Date(today);
-      cutoff.setDate(cutoff.getDate() - days);
-      const dayOfDate = new Date(d).setHours(0,0,0,0);
-      return dayOfDate >= cutoff;
-    }
-    function isSameDay(d1, d2) {
-      const a = toDateSafe(d1), b = toDateSafe(d2);
-      return a && b && a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); 
-    }
-    
-    function getRequiredBreak(workMinutes) { if (workMinutes >= 540) return 45; if (workMinutes >= 360) return 30; return 0; }
+
     function analyzeDay(entries) {
       let workMin = 0, breakMin = 0;
       for(let i = 0; i < entries.length; i++) {
@@ -368,179 +453,527 @@
       const req = getRequiredBreak(workMin);
       return { workMin, breakMin, req, deficit: Math.max(0, req - breakMin) };
     }
-    
-    async function loadUserState() {
-      if(!user) return;
-      btn.disabled = true; status.textContent = "Lade..."; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
-      try {
-        const snap = await db.collection('entries').where('employee','==',user).orderBy('startTime','desc').limit(100).get();
-        allEntries = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        const last = allEntries[0] || null;
-        if (last && !last.endTime) {
-          const start = toDateSafe(last.startTime);
-          if (start && !isSameDay(start, new Date())) {
-            const endTime = new Date(start.getTime() + 60000);
-            await db.collection('entries').doc(last.id).update({ endTime });
-            showWarning("⚠️ Offene Buchung vom Vortag wurde automatisch beendet (+1 Min).");
-            await loadUserState(); return;
-          }
-        }
-        updateUI(last); renderList(allEntries);
-      } catch(e) {
-        if(e.message.includes('index')) showError("⚠️ Firestore-Index fehlt."); else showError("Fehler: "+e.message);
-        updateUI(null); renderList([]);
+
+    function showError(msg) {
+      errorMsg.textContent = msg;
+      errorMsg.style.display = 'block';
+      tableContainer.innerHTML = '';
+    }
+
+    async function loadTimesheet(user) {
+      if (!user) {
+        tableContainer.innerHTML = '<div class="loading">Bitte Mitarbeiter auswählen...</div>';
+        exportPdfBtn.disabled = true;
+        return;
       }
-    }
-    
-    function updateUI(last) {
-      if(last && !last.endTime) {
-        btn.textContent = 'GEHEN'; btn.classList.add('check-out');
-        const start = toDateSafe(last.startTime);
-        status.textContent = start ? `Aktiv seit ${fmtTime(start)} (${fmtDur(msToMin(Date.now()-start))})` : 'Aktiv';
-      } else { btn.textContent = 'KOMMEN'; btn.classList.remove('check-out'); status.textContent = 'Bereit'; }
-      btn.disabled = false;
-    }
-    
-    function renderList(entries) {
-      if(!entries.length) { list.innerHTML = '<div class="loading">Keine Einträge</div>'; return; }
-      const days = parseInt(rangeFilter.value); const byDay = {};
-      entries.forEach(e => { const s = toDateSafe(e.startTime); if(!inRange(s, days)) return; const key = fmtKey(s); if(!byDay[key]) byDay[key] = { date: s, entries: [] }; byDay[key].entries.push(e); });
-      if(!Object.keys(byDay).length) { list.innerHTML = '<div class="loading">Keine Einträge im Zeitraum</div>'; return; }
-      let html = '';
-      Object.values(byDay).sort((a,b) => b.date - a.date).forEach(day => {
-        day.entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
-        const stats = analyzeDay(day.entries);
-        let breakHtml = '';
-        if(stats.req > 0) {
-          breakHtml = `<div class="${stats.deficit>0?'break-warning':'break-info'}">Pause: ${fmtDur(stats.breakMin)} / ${fmtDur(stats.req)}${stats.deficit>0 ? ' (-'+stats.deficit+'min)' : ' (OK)'}</div>`;
-        }
-        const today = new Date(); today.setHours(0,0,0,0);
-        const yesterday = new Date(); yesterday.setDate(today.getDate()-1); yesterday.setHours(0,0,0,0);
+      currentUser = user;
+      exportPdfBtn.disabled = false;
+      localStorage.setItem('tz_user', user);
+      tableContainer.innerHTML = '<div class="loading">Lade Daten...</div>';
+      errorMsg.style.display = 'none';
 
-        const rows = day.entries.map(e => {
-        const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime);
-        const sIso = s ? s.toISOString() : '', eIso = en ? en.toISOString() : '';
-        const dayDate = new Date(s); dayDate.setHours(0,0,0,0);
-        const canEdit = (dayDate.getTime() === today.getTime() || dayDate.getTime() === yesterday.getTime());
-        const editBtnIn = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="startTime" data-v="${sIso}">✏️</button>` : '';
-        const editBtnOut = canEdit ? `<button class="corr-btn" data-id="${e.id}" data-f="endTime" data-v="${eIso}">✏️</button>` : '';
-        return `<div class="time-row"><span class="time-label">IN</span><span class="time-val">${fmtTime(s)}</span>${editBtnIn}</div><div class="time-row"><span class="time-label">OUT</span><span class="time-val">${en ? fmtTime(en) : 'Offen'}</span>${editBtnOut}</div>`;
-          }).join('');
-        const totalWork = day.entries.reduce((sum, e) => { const s = toDateSafe(e.startTime), en = toDateSafe(e.endTime); return sum + (s && en ? msToMin(en-s) : 0); }, 0);
-        html += `<div class="day-group"><div class="day-header"><span>${fmtDate(day.date)}</span><span class="day-total">Σ ${fmtDur(totalWork)}</span></div>${rows}${breakHtml}${day.entries[0]?.note ? `<div class="note">Notiz: ${day.entries[0].note}</div>` : ''}</div>`;
-      });
-      list.innerHTML = html;
-      document.querySelectorAll('.corr-btn').forEach(b => { b.onclick = (ev) => { correctTimestamp(ev.target.dataset.id, ev.target.dataset.f, ev.target.dataset.v); }; });
-    }
-    
-    async function correctTimestamp(id, field, isoVal) {
-      const pw = document.getElementById('password')?.value || '';
-      if(!checkPassword(user, pw)) { alert('❌ Falsches Passwort – keine Änderung möglich.'); return; }
-      const base = isoVal ? new Date(isoVal) : new Date();
-      const cur = base.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'});
-      const input = prompt('Neue Zeit (HH:MM):', cur); if(!input) return;
-      const [h,m] = input.split(':').map(Number);
-      if(isNaN(h)||isNaN(m)||h<0||h>23||m<0||m>59) { alert('Ungültig'); return; }
-      const newDate = new Date(base); newDate.setHours(h,m,0,0);
-      const ts = firebase.firestore.Timestamp.fromDate(newDate);
-      try { await db.collection('entries').doc(id).update({[field]:ts}); await loadUserState(); }
-      catch(e) { showError('Fehler: '+e.message); }
-    }
-    
-    btn.addEventListener('click', async () => {
-      if(!user) return;
-      const pw = document.getElementById('password')?.value || '';
-      if(!checkPassword(user, pw)) { showError('❌ Falsches Passwort für '+user); btn.disabled = false; return; }
-      btn.disabled = true; status.textContent = 'Speichere...'; errorMsg.style.display = 'none'; warningMsg.style.display = 'none';
-      try {
-        const snap = await db.collection('entries').where('employee','==',user).where('endTime','==',null).limit(1).get();
-        if(snap.empty) {
-          await db.collection('entries').add({ employee:user, startTime: serverTimestamp(), endTime:null, note:'', createdAt: serverTimestamp() });
-        } else {
-          const doc = snap.docs[0];
-          await db.collection('entries').doc(doc.id).update({ endTime: new Date() });
-        }
-        await loadUserState();
-      } catch(e) { showError('Fehler: '+e.message); btn.disabled = false; }
-    });
-    
-    // === EXPORT (LETZTER MONAT) ===
-    async function exportData(format) {
-      if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      exportBtn.disabled = true; exportBtn.querySelector('.export-main').textContent = 'Erstelle...';
-      try {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-        const snap = await db.collection('entries').where('employee', '==', user).where('startTime', '>=', monthStart).where('startTime', '<=', monthEnd).get();
-        const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
-        entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
-        const byDay = {};
-        entries.forEach(e => { const s = toDateSafe(e.startTime); if(!s) return; const key = fmtKey(s); if(!byDay[key]) byDay[key] = []; byDay[key].push(e); });
-        
-        const tableData = []; let totalMonth = 0;
-        Object.keys(byDay).sort().forEach(dayKey => {
-          const dayEntries = byDay[dayKey];
-          const stats = analyzeDay(dayEntries);
-          const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          const effectiveBreak = Math.max(stats.breakMin, stats.req);
-          const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
-          let outDisplay;
-          if (stats.deficit > 0) {
-            const firstIn = toDateSafe(dayEntries[0].startTime);
-            const adjustedOut = new Date(firstIn.getTime() + (stats.workMin + stats.req) * 60000);
-            outDisplay = fmtTime(adjustedOut);
-          } else {
-            const lastEntry = dayEntries[dayEntries.length-1];
-            outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
-          }
-          
-          // Notiz für die Hinweis-Spalte extrahieren
-          const noteText = dayEntries.find(e => e.note)?.note || '';
-          const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
-          
-          tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
-        });
-        tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
-        
-        if(format === 'pdf') {
-          const { jsPDF } = window.jspdf; const doc = new jsPDF();
-          doc.setFontSize(16); doc.text(`Arbeitszeitnachweis: ${user}`, 14, 20);
-          doc.setFontSize(10); doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
-          doc.autoTable({ startY: 35, head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], body: tableData, theme: 'grid', headStyles: { fillColor: [37, 99, 235] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, didDrawPage: function(data) { if (data.pageNumber === doc.internal.getNumberOfPages()) { const finalY = data.cursor.y + 10; doc.setLineWidth(0.5); doc.line(14, finalY, 90, finalY); doc.line(100, finalY, 180, finalY); doc.setFontSize(9); doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); } } });
-          await new Promise(resolve => setTimeout(resolve, 100));
-          const filename = `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.pdf`; doc.save(filename);
-        } else if(format === 'excel') {
-          const wb = XLSX.utils.book_new();
-          const wsData = [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis'], ...tableData];
-          const ws = XLSX.utils.aoa_to_sheet(wsData); ws['!cols'] = [{wch:12}, {wch:10}, {wch:10}, {wch:10}, {wch:12}, {wch:20}];
-          XLSX.utils.book_append_sheet(wb, ws, "Zeiten"); XLSX.writeFile(wb, `Zeiten_${user}_${monthStart.getMonth()+1}-${monthStart.getFullYear()}.xlsx`);
-        }
-      } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
-      exportBtn.disabled = false; exportBtn.querySelector('.export-main').textContent = 'Letzter Monat';
-    }
-
-    // === EXPORT (DIESER MONAT) ===
-    async function exportCurrentMonthData(format) {
-      if(!user) return showError("Bitte zuerst Mitarbeiter wählen.");
-      exportCurrentBtn.disabled = true; exportCurrentBtn.querySelector('.export-main').textContent = 'Erstelle...';
       try {
         const now = new Date();
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        const snap = await db.collection('entries').where('employee', '==', user).where('startTime', '>=', monthStart).where('startTime', '<=', monthEnd).get();
+
+        const snap = await db.collection('entries')
+          .where('employee', '==', user)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+
+        if (snap.empty) {
+          tableContainer.innerHTML = '<div class="empty-day">Keine Einträge in diesem Monat.</div>';
+          return;
+        }
+
+        currentEntries = [];
+        const byDay = {};
+        let hasComplexDays = false;
+
+        snap.forEach(doc => {
+          const data = doc.data();
+          const start = toDateSafe(data.startTime);
+          if (!start) return;
+          const dateKey = start.toISOString().slice(0, 10);
+          
+          const entry = {
+            id: doc.id,
+            employee: data.employee,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            note: data.note || '',
+            startMs: start.getTime(),
+            endMs: data.endTime ? toDateSafe(data.endTime).getTime() : start.getTime()
+          };
+          
+          currentEntries.push(entry);
+          if (!byDay[dateKey]) byDay[dateKey] = [];
+          byDay[dateKey].push(entry);
+        });
+
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(now);
+          d.setDate(now.getDate() - i);
+          if (d >= monthStart) {
+            const dateKey = d.toISOString().slice(0, 10);
+            if (!byDay[dateKey]) byDay[dateKey] = [];
+          }
+        }
+
+        for (const key in byDay) {
+          if (byDay[key].length >= 3) {
+            hasComplexDays = true;
+            break;
+          }
+        }
+
+        let headerHtml = '';
+        if (hasComplexDays) {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:18%">Von</th>
+            <th style="width:18%">Bis</th>
+            <th style="width:15%">Dauer</th>
+            <th style="width:15%; text-align:right;">Gesamt</th>
+            <th style="width:22%; text-align:center;">Aktion</th>
+          </tr>`;
+        } else {
+          headerHtml = `<tr>
+            <th style="width:12%">Tag</th>
+            <th style="width:15%">In</th>
+            <th style="width:15%">Pause In</th>
+            <th style="width:15%">Pause Out</th>
+            <th style="width:15%">Out</th>
+            <th style="width:15%; text-align:right;">Stunden</th>
+            <th style="width:13%; text-align:center;">Aktion</th>
+          </tr>`;
+        }
+
+        let html = `<table><thead>${headerHtml}</thead><tbody>`;
+        const sortedDays = Object.keys(byDay).sort();
+
+        for (const dateKey of sortedDays) {
+          const entries = byDay[dateKey].sort((a, b) => a.startMs - b.startMs);
+          const totalMin = entries.reduce((sum, e) => sum + (e.endTime ? (e.endMs - e.startMs) / 60000 : 0), 0);
+          const canEdit = isEditable(dateKey);
+
+          const dayNote = entries.find(e => e.note)?.note;
+          const noteRowHtml = dayNote ? `<tr class="note-row"><td colspan="7">📝 ${dayNote}</td></tr>` : '';
+
+          if (entries.length === 0) {
+            // Keine Einträge: Nur bearbeiten wenn Frist noch läuft
+            const actionBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Eintrag hinzufügen">➕</button>` : '';
+            if (hasComplexDays) {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td colspan="4" class="empty-day" style="padding: 6px; text-align: center;">Keine Einträge</td>
+                <td style="text-align: center;">${actionBtn}</td>
+              </tr>`;
+            } else {
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td class="total-cell">0min</td>
+                <td style="text-align: center;">${actionBtn}</td>
+              </tr>`;
+            }
+          } else if (hasComplexDays) {
+            if (entries.length <= 2) {
+              const d1 = entries[0];
+              const d2 = entries[1] || null;
+              const inTime = fmtTime(d1.startTime);
+              const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+              
+              // ÄNDERUNG 2: Zeige 📝 wenn Frist abgelaufen ist, aber Einträge existieren
+              let actionBtn = '';
+              if (canEdit) {
+                actionBtn = `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Bearbeiten">✏️</button>`;
+              } else {
+                actionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditDay('${dateKey}')" title="Nur Notiz bearbeiten">📝</button>`;
+              }
+              
+              html += `<tr>
+                <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+                <td>${inTime}</td>
+                <td>${outTime}</td>
+                <td class="duration-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+                <td style="text-align: center;">${actionBtn}</td>
+              </tr>`;
+              if (noteRowHtml) html += noteRowHtml;
+              
+            } else {
+              entries.forEach((entry, index) => {
+                const isLast = index === entries.length - 1;
+                const tag = index === 0 ? fmtDateShort(dateKey) : '';
+                const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
+                const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
+                
+                // ÄNDERUNG 2: Zeige 📝 pro Zeile wenn Frist abgelaufen ist
+                let rowActionBtn = '';
+                if (canEdit) {
+                  rowActionBtn = `<button class="edit-btn" onclick="openEditRow('${entry.id}')" title="Block bearbeiten">✏️</button>`;
+                } else {
+                  rowActionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditRow('${entry.id}')" title="Nur Notiz bearbeiten">📝</button>`;
+                }
+                
+                html += `<tr>
+                  <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
+                  <td>${fmtTime(entry.startTime)}</td>
+                  <td>${fmtTime(entry.endTime)}</td>
+                  <td class="duration-cell">${fmtDur(blockMin)}</td>
+                  <td class="total-cell">${totalDur}</td>
+                  <td style="text-align: center;">${rowActionBtn}</td>
+                </tr>`;
+              });
+              if (noteRowHtml) html += noteRowHtml;
+            }
+          } else {
+            const d1 = entries[0];
+            const d2 = entries[1] || null;
+            const inTime = fmtTime(d1.startTime);
+            const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
+            const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
+            const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
+            
+            // ÄNDERUNG 2: Zeige 📝 wenn Frist abgelaufen ist, aber Einträge existieren
+            let actionBtn = '';
+            if (canEdit) {
+              actionBtn = `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Bearbeiten">✏️</button>`;
+            } else {
+              actionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditDay('${dateKey}')" title="Nur Notiz bearbeiten">📝</button>`;
+            }
+            
+            html += `<tr>
+              <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
+              <td>${inTime}</td>
+              <td>${pauseIn}</td>
+              <td>${pauseOut}</td>
+              <td>${outTime}</td>
+              <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
+              <td style="text-align: center;">${actionBtn}</td>
+            </tr>`;
+            if (noteRowHtml) html += noteRowHtml;
+          }
+        }
+
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+
+      } catch (e) {
+        console.error(e);
+        showError('Fehler beim Laden: ' + e.message);
+      }
+    }
+
+    let editMode = '';
+    let currentEditDateKey = null;
+    let currentEditEntryId = null;
+
+    function openEditDay(dateKey) {
+      currentEditDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
+      
+      document.getElementById('deadlineWarning').style.display = 'none';
+      document.getElementById('dayEditFields').style.display = 'block';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = (dayEntries.length > 0 && dayEntries[0].note) ? dayEntries[0].note : '';
+
+      if (dayEntries.length === 0) {
+        editMode = 'day-new';
+        document.getElementById('modalTitle').textContent = 'Neuen Eintrag hinzufügen';
+        document.getElementById('editIn').value = '08:00';
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = '17:00';
+      } else if (dayEntries.length === 1) {
+        editMode = 'day-1';
+        document.getElementById('modalTitle').textContent = 'Eintrag bearbeiten (Pause nachtragen möglich)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = '';
+        document.getElementById('editPauseOut').value = '';
+        document.getElementById('editOut').value = fmtTime(dayEntries[0].endTime);
+      } else {
+        editMode = 'day-2';
+        document.getElementById('modalTitle').textContent = 'Tageszeiten bearbeiten (2 Blöcke)';
+        document.getElementById('editIn').value = fmtTime(dayEntries[0].startTime);
+        document.getElementById('editPauseIn').value = fmtTime(dayEntries[0].endTime);
+        document.getElementById('editPauseOut').value = fmtTime(dayEntries[1].startTime);
+        document.getElementById('editOut').value = fmtTime(dayEntries[1].endTime);
+      }
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openEditRow(entryId) {
+      editMode = 'row';
+      currentEditEntryId = entryId;
+      const entry = currentEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('deadlineWarning').style.display = 'none';
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'block';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Diesen Zeitblock bearbeiten';
+      
+      document.getElementById('editRowIn').value = fmtTime(entry.startTime);
+      document.getElementById('editRowOut').value = entry.endTime ? fmtTime(entry.endTime) : '';
+      document.getElementById('editNote').value = entry.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    // ÄNDERUNG 2: Neue Funktionen für reine Notizbearbeitung nach Fristablauf
+    function openNoteEditDay(dateKey) {
+      currentEditDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
+      if (dayEntries.length === 0) return;
+
+      editMode = 'note-only-day';
+      currentEditEntryId = dayEntries[0].id; // Notiz wird am ersten Eintrag des Tages gespeichert
+      
+      document.getElementById('deadlineWarning').style.display = 'block';
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Notiz bearbeiten';
+      document.getElementById('editNote').value = dayEntries.find(e => e.note)?.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openNoteEditRow(entryId) {
+      editMode = 'note-only-row';
+      currentEditEntryId = entryId;
+      const entry = currentEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('deadlineWarning').style.display = 'block';
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Notiz bearbeiten';
+      document.getElementById('editNote').value = entry.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').classList.remove('active');
+      document.getElementById('editPassword').value = '';
+      document.getElementById('editNote').value = '';
+      document.getElementById('deadlineWarning').style.display = 'none'; // Warnung zurücksetzen
+      editMode = '';
+      currentEditDateKey = null;
+      currentEditEntryId = null;
+    }
+
+    async function saveEdits() {
+      const enteredPw = document.getElementById('editPassword').value;
+      if (!currentUser || !staffDB[currentUser] || staffDB[currentUser] !== enteredPw) {
+        alert('❌ Falsches Passwort. Änderungen wurden nicht gespeichert.');
+        document.getElementById('editPassword').value = '';
+        return;
+      }
+
+      const note = document.getElementById('editNote').value.trim();
+
+      try {
+        // ÄNDERUNG 2: Speichern von reinen Notiz-Updates
+        if (editMode === 'note-only-day' || editMode === 'note-only-row') {
+          if (currentEditEntryId) {
+            await db.collection('entries').doc(currentEditEntryId).update({
+              note: note
+            });
+          }
+        }
+        else if (editMode === 'day-new') {
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (!inTime || !outTime) {
+            alert('Bitte mindestens Komm- und Gehzeit angeben.');
+            return;
+          }
+
+          const parts = currentEditDateKey.split('-');
+          const baseDate = new Date(parts[0], parts[1] - 1, parts[2]);
+          
+          if (pauseInTime && pauseOutTime) {
+            const start1 = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start1.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end1 = new Date(baseDate);
+            const [h2, m2] = pauseInTime.split(':');
+            end1.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start1),
+              endTime: firebase.firestore.Timestamp.fromDate(end1),
+              note: note,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const start2 = new Date(baseDate);
+            const [h3, m3] = pauseOutTime.split(':');
+            start2.setHours(parseInt(h3), parseInt(m3), 0, 0);
+            const end2 = new Date(baseDate);
+            const [h4, m4] = outTime.split(':');
+            end2.setHours(parseInt(h4), parseInt(m4), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start2),
+              endTime: firebase.firestore.Timestamp.fromDate(end2),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            const start = new Date(baseDate);
+            const [h1, m1] = inTime.split(':');
+            start.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const end = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            end.setHours(parseInt(h2), parseInt(m2), 0, 0);
+
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(start),
+              endTime: firebase.firestore.Timestamp.fromDate(end),
+              note: note,
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        } 
+        else if (editMode === 'day-1') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey);
+          const inTime = document.getElementById('editIn').value;
+          const pauseInTime = document.getElementById('editPauseIn').value;
+          const pauseOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          if (pauseInTime && pauseOutTime) {
+            await updateEntry(dayEntries[0].id, inTime, pauseInTime, note);
+            const baseDate = toDateSafe(dayEntries[0].startTime);
+            const newStart = new Date(baseDate);
+            const [h1, m1] = pauseOutTime.split(':');
+            newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+            const newEnd = new Date(baseDate);
+            const [h2, m2] = outTime.split(':');
+            newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+            
+            await db.collection('entries').add({
+              employee: currentUser,
+              startTime: firebase.firestore.Timestamp.fromDate(newStart),
+              endTime: firebase.firestore.Timestamp.fromDate(newEnd),
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } else {
+            await updateEntry(dayEntries[0].id, inTime, outTime, note);
+          }
+        } 
+        else if (editMode === 'day-2') {
+          const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === currentEditDateKey).sort((a, b) => a.startMs - b.startMs);
+          const inTime = document.getElementById('editIn').value;
+          const pInTime = document.getElementById('editPauseIn').value;
+          const pOutTime = document.getElementById('editPauseOut').value;
+          const outTime = document.getElementById('editOut').value;
+          
+          await updateEntry(dayEntries[0].id, inTime, pInTime, note);
+          await updateEntry(dayEntries[1].id, pOutTime, outTime);
+        } 
+        else if (editMode === 'row') {
+          const inTime = document.getElementById('editRowIn').value;
+          const outTime = document.getElementById('editRowOut').value;
+          await updateEntry(currentEditEntryId, inTime, outTime, note);
+        }
+        
+        closeModal();
+        loadTimesheet(employeeSelect.value);
+      } catch (e) {
+        console.error(e);
+        alert('Fehler beim Speichern: ' + e.message);
+      }
+    }
+
+    async function updateEntry(id, inStr, outStr, note) {
+      const entry = currentEntries.find(e => e.id === id);
+      if (!entry) return;
+      
+      const baseDate = toDateSafe(entry.startTime);
+      const updateData = {};
+
+      const newStart = new Date(baseDate);
+      const [h1, m1] = inStr.split(':');
+      newStart.setHours(parseInt(h1), parseInt(m1), 0, 0);
+      updateData.startTime = firebase.firestore.Timestamp.fromDate(newStart);
+
+      if (outStr) {
+        const newEnd = new Date(baseDate);
+        const [h2, m2] = outStr.split(':');
+        newEnd.setHours(parseInt(h2), parseInt(m2), 0, 0);
+        updateData.endTime = firebase.firestore.Timestamp.fromDate(newEnd);
+      }
+
+      if (note !== undefined) {
+        updateData.note = note;
+      }
+
+      await db.collection('entries').doc(id).update(updateData);
+    }
+
+    async function exportCurrentMonthPDF() {
+      if (!currentUser) {
+        alert('Bitte zuerst Mitarbeiter auswählen.');
+        return;
+      }
+      
+      exportPdfBtn.disabled = true;
+      const originalText = exportPdfBtn.textContent;
+      exportPdfBtn.textContent = 'Erstelle...';
+
+      try {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        
+        const snap = await db.collection('entries')
+          .where('employee', '==', currentUser)
+          .where('startTime', '>=', monthStart)
+          .where('startTime', '<=', monthEnd)
+          .orderBy('startTime', 'asc')
+          .get();
+          
         const entries = snap.docs.map(d => ({id: d.id, ...d.data()}));
         entries.sort((a,b) => (toDateSafe(a.startTime)||0) - (toDateSafe(b.startTime)||0));
-        const byDay = {};
-        entries.forEach(e => { const s = toDateSafe(e.startTime); if(!s) return; const key = fmtKey(s); if(!byDay[key]) byDay[key] = []; byDay[key].push(e); });
         
-        const tableData = []; let totalMonth = 0;
+        const byDay = {};
+        entries.forEach(e => { 
+          const s = toDateSafe(e.startTime); 
+          if(!s) return; 
+          const key = fmtKey(s); 
+          if(!byDay[key]) byDay[key] = []; 
+          byDay[key].push(e); 
+        });
+        
+        const tableData = []; 
+        let totalMonth = 0;
+        
         Object.keys(byDay).sort().forEach(dayKey => {
           const dayEntries = byDay[dayKey];
           const stats = analyzeDay(dayEntries);
-          const displayedWorkMin = stats.workMin; totalMonth += displayedWorkMin;
-          const effectiveBreak = Math.max(stats.breakMin, stats.req);
-          const pauseDisplay = effectiveBreak > 0 ? fmtDur(effectiveBreak) : '-';
+          const displayedWorkMin = stats.workMin; 
+          totalMonth += displayedWorkMin;
+          const pauseDisplay = stats.req > 0 ? fmtDur(stats.req) : (stats.breakMin > 0 ? fmtDur(stats.breakMin) : '-');
           let outDisplay;
           if (stats.deficit > 0) {
             const firstIn = toDateSafe(dayEntries[0].startTime);
@@ -551,30 +984,59 @@
             outDisplay = lastEntry.endTime ? fmtTime(toDateSafe(lastEntry.endTime)) : 'Offen';
           }
           
-          // Notiz für die Hinweis-Spalte extrahieren
           const noteText = dayEntries.find(e => e.note)?.note || '';
           const hinweisText = noteText ? `Hinweis: ${noteText}` : '';
           
           tableData.push([fmtDate(toDateSafe(dayEntries[0].startTime)), fmtTime(toDateSafe(dayEntries[0].startTime)), outDisplay, pauseDisplay, fmtDur(displayedWorkMin), hinweisText]);
         });
+        
         tableData.push(['', '', '', '', 'Gesamt:', fmtDur(totalMonth)]);
         
-        if(format === 'pdf') {
-          const { jsPDF } = window.jspdf; const doc = new jsPDF();
-          doc.setFontSize(16); doc.text(`Arbeitszeitnachweis (Laufend): ${user}`, 14, 20);
-          doc.setFontSize(10); doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
-          doc.autoTable({ startY: 35, head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], body: tableData, theme: 'grid', headStyles: { fillColor: [5, 150, 105] }, styles: { fontSize: 9, cellPadding: 3 }, columnStyles: { 0: {cellWidth: 30}, 1: {cellWidth: 25}, 2: {cellWidth: 25}, 3: {cellWidth: 25}, 4: {cellWidth: 30}, 5: {cellWidth: 45} }, didDrawPage: function(data) { if (data.pageNumber === doc.internal.getNumberOfPages()) { const finalY = data.cursor.y + 10; doc.setLineWidth(0.5); doc.line(14, finalY, 90, finalY); doc.line(100, finalY, 180, finalY); doc.setFontSize(9); doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); } } });
-          await new Promise(resolve => setTimeout(resolve, 100));
-          const filename = `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; doc.save(filename);
-        } else if(format === 'excel') {
-          const wb = XLSX.utils.book_new();
-          const wsData = [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis'], ...tableData];
-          const ws = XLSX.utils.aoa_to_sheet(wsData); ws['!cols'] = [{wch:12}, {wch:10}, {wch:10}, {wch:10}, {wch:12}, {wch:20}];
-          XLSX.utils.book_append_sheet(wb, ws, "Zeiten"); XLSX.writeFile(wb, `Zeiten_Laufend_${user}_${now.getMonth()+1}-${now.getFullYear()}.xlsx`);
-        }
-      } catch(e) { console.error("Export error:", e); showError("Export-Fehler: "+e.message); }
-      exportCurrentBtn.disabled = false; exportCurrentBtn.querySelector('.export-main').textContent = 'Dieser Monat';
+        const { jsPDF } = window.jspdf; 
+        const doc = new jsPDF();
+        doc.setFontSize(16); 
+        doc.text(`Arbeitszeitnachweis (Laufend): ${currentUser}`, 14, 20);
+        doc.setFontSize(10); 
+        doc.text(`Zeitraum: ${monthStart.toLocaleDateString('de-DE')} bis ${monthEnd.toLocaleDateString('de-DE')}`, 14, 28);
+        
+        doc.autoTable({ 
+          startY: 35, 
+          head: [['Datum', 'IN', 'OUT', 'Pause', 'Arbeitszeit', 'Hinweis']], 
+          body: tableData, 
+          theme: 'grid', 
+          headStyles: { fillColor: [5, 150, 105] }, 
+          styles: { fontSize: 9, cellPadding: 3 }, 
+          columnStyles: { 0: {cellWidth: 25}, 1: {cellWidth: 20}, 2: {cellWidth: 20}, 3: {cellWidth: 20}, 4: {cellWidth: 25}, 5: {cellWidth: 50} }, 
+          didDrawPage: function(data) { 
+            if (data.pageNumber === doc.internal.getNumberOfPages()) { 
+              const finalY = data.cursor.y + 10; 
+              doc.setLineWidth(0.5); 
+              doc.line(14, finalY, 90, finalY); 
+              doc.line(100, finalY, 180, finalY); 
+              doc.setFontSize(9); 
+              doc.text("Unterschrift Mitarbeiter", 14, finalY + 5); 
+              doc.text("Unterschrift Vorgesetzter", 100, finalY + 5); 
+              doc.text(`Erstellt am: ${new Date().toLocaleDateString('de-DE')}`, 14, finalY + 15); 
+            } 
+          } 
+        });
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const filename = `Zeiten_Laufend_${currentUser}_${now.getMonth()+1}-${now.getFullYear()}.pdf`; 
+        doc.save(filename);
+        
+      } catch(e) { 
+        console.error("Export error:", e); 
+        alert("Export-Fehler: " + e.message); 
+      } finally {
+        exportPdfBtn.disabled = false;
+        exportPdfBtn.textContent = originalText;
+      }
     }
+
+    employeeSelect.addEventListener('change', (e) => loadTimesheet(e.target.value));
+    loadColors();
+    loadStaff();
   </script>
 </body>
 </html>
