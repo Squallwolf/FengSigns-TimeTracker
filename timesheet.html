@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- NEU: Favicon hinzugefügt, um den favicon.ico Fehler zu beheben -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://firestore.googleapis.com; style-src 'self' 'unsafe-inline';">
     <title>Stundenzettel</title>
@@ -194,6 +193,18 @@
             line-height: 1.4;
             word-break: break-word;
         }
+
+        /* NEU: Stil für die Fristablauf-Warnung im Modal */
+        .deadline-warning {
+            background-color: #fef2f2;
+            color: #dc2626;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            border: 1px solid #fecaca;
+            display: none;
+        }
     </style>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -236,6 +247,11 @@
     <div class="modal-content">
       <div class="modal-header" id="modalTitle">Zeiten bearbeiten</div>
       
+      <!-- NEU: Warnhinweis bei abgelaufener Frist -->
+      <div id="deadlineWarning" class="deadline-warning">
+        ⚠️ Die Bearbeitungsfrist für Zeiten ist abgelaufen. Es kann nur noch die Notiz geändert werden.
+      </div>
+
       <div id="dayEditFields" style="display:none;">
         <div class="modal-field">
           <label>Kommen (In)</label>
@@ -317,7 +333,6 @@
 
     async function loadColors() {
       try {
-        // NEU: Cache-Busting hinzugefügt
         const res = await fetch('colors.json?cb=' + Date.now());
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const colors = await res.json();
@@ -350,6 +365,7 @@
       }
     }
 
+    // ÄNDERUNG 1: Bearbeitungsfrist von 3 auf 4 Tage erhöht (<= 3 statt <= 2)
     function isEditable(dateKey) {
       const parts = dateKey.split('-');
       const entryDate = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -358,12 +374,11 @@
       today.setHours(0, 0, 0, 0);
       const diffTime = today - entryDate;
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays <= 2;
+      return diffDays >= 0 && diffDays <= 3; // 0 = heute, 1 = gestern, 2 = vorgestern, 3 = vor 3 Tagen (insgesamt 4 Tage)
     }
 
     async function loadStaff() {
       try {
-        // NEU: Cache-Busting hinzugefügt, damit GitHub Pages immer die neueste Datei liefert
         const res = await fetch('staff.json?cb=' + Date.now());
         if (!res.ok) {
             throw new Error('HTTP Status: ' + res.status + ' (Prüfe, ob staff.json im selben Ordner liegt)');
@@ -378,7 +393,7 @@
           loadTimesheet(savedUser);
         }
       } catch (e) {
-        console.error('Fehler beim Laden von staff.json:', e); // NEU: Detaillierter Console-Error
+        console.error('Fehler beim Laden von staff.json:', e);
         showError('Mitarbeiter-Daten nicht ladbar. (F12 drücken für Details)');
       }
     }
@@ -549,12 +564,13 @@
           const noteRowHtml = dayNote ? `<tr class="note-row"><td colspan="7">📝 ${dayNote}</td></tr>` : '';
 
           if (entries.length === 0) {
-            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">➕</button>` : '';
+            // Keine Einträge: Nur bearbeiten wenn Frist noch läuft
+            const actionBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Eintrag hinzufügen">➕</button>` : '';
             if (hasComplexDays) {
               html += `<tr>
                 <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
                 <td colspan="4" class="empty-day" style="padding: 6px; text-align: center;">Keine Einträge</td>
-                <td style="text-align: center;">${editBtn}</td>
+                <td style="text-align: center;">${actionBtn}</td>
               </tr>`;
             } else {
               html += `<tr>
@@ -564,7 +580,7 @@
                 <td>-</td>
                 <td>-</td>
                 <td class="total-cell">0min</td>
-                <td style="text-align: center;">${editBtn}</td>
+                <td style="text-align: center;">${actionBtn}</td>
               </tr>`;
             }
           } else if (hasComplexDays) {
@@ -573,7 +589,14 @@
               const d2 = entries[1] || null;
               const inTime = fmtTime(d1.startTime);
               const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
-              const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+              
+              // ÄNDERUNG 2: Zeige 📝 wenn Frist abgelaufen ist, aber Einträge existieren
+              let actionBtn = '';
+              if (canEdit) {
+                actionBtn = `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Bearbeiten">✏️</button>`;
+              } else {
+                actionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditDay('${dateKey}')" title="Nur Notiz bearbeiten">📝</button>`;
+              }
               
               html += `<tr>
                 <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
@@ -581,7 +604,7 @@
                 <td>${outTime}</td>
                 <td class="duration-cell">${fmtDur(Math.floor(totalMin))}</td>
                 <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
-                <td style="text-align: center;">${editBtn}</td>
+                <td style="text-align: center;">${actionBtn}</td>
               </tr>`;
               if (noteRowHtml) html += noteRowHtml;
               
@@ -591,7 +614,14 @@
                 const tag = index === 0 ? fmtDateShort(dateKey) : '';
                 const blockMin = entry.endTime ? Math.floor((entry.endMs - entry.startMs) / 60000) : 0;
                 const totalDur = isLast ? fmtDur(Math.floor(totalMin)) : '';
-                const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditRow('${entry.id}')">✏️</button>` : '';
+                
+                // ÄNDERUNG 2: Zeige 📝 pro Zeile wenn Frist abgelaufen ist
+                let rowActionBtn = '';
+                if (canEdit) {
+                  rowActionBtn = `<button class="edit-btn" onclick="openEditRow('${entry.id}')" title="Block bearbeiten">✏️</button>`;
+                } else {
+                  rowActionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditRow('${entry.id}')" title="Nur Notiz bearbeiten">📝</button>`;
+                }
                 
                 html += `<tr>
                   <td style="font-family: inherit; font-weight: ${index === 0 ? '600' : 'normal'}">${tag}</td>
@@ -599,7 +629,7 @@
                   <td>${fmtTime(entry.endTime)}</td>
                   <td class="duration-cell">${fmtDur(blockMin)}</td>
                   <td class="total-cell">${totalDur}</td>
-                  <td style="text-align: center;">${editBtn}</td>
+                  <td style="text-align: center;">${rowActionBtn}</td>
                 </tr>`;
               });
               if (noteRowHtml) html += noteRowHtml;
@@ -611,7 +641,14 @@
             const pauseIn = d2 ? fmtTime(d1.endTime) : '-';
             const pauseOut = d2 ? fmtTime(d2.startTime) : '-';
             const outTime = d2 ? fmtTime(d2.endTime) : fmtTime(d1.endTime);
-            const editBtn = canEdit ? `<button class="edit-btn" onclick="openEditDay('${dateKey}')">✏️</button>` : '';
+            
+            // ÄNDERUNG 2: Zeige 📝 wenn Frist abgelaufen ist, aber Einträge existieren
+            let actionBtn = '';
+            if (canEdit) {
+              actionBtn = `<button class="edit-btn" onclick="openEditDay('${dateKey}')" title="Bearbeiten">✏️</button>`;
+            } else {
+              actionBtn = `<button class="edit-btn" style="background:#f1f5f9; color:#64748b;" onclick="openNoteEditDay('${dateKey}')" title="Nur Notiz bearbeiten">📝</button>`;
+            }
             
             html += `<tr>
               <td style="font-family: inherit; font-weight: 600">${fmtDateShort(dateKey)}</td>
@@ -620,7 +657,7 @@
               <td>${pauseOut}</td>
               <td>${outTime}</td>
               <td class="total-cell">${fmtDur(Math.floor(totalMin))}</td>
-              <td style="text-align: center;">${editBtn}</td>
+              <td style="text-align: center;">${actionBtn}</td>
             </tr>`;
             if (noteRowHtml) html += noteRowHtml;
           }
@@ -643,6 +680,7 @@
       currentEditDateKey = dateKey;
       const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
       
+      document.getElementById('deadlineWarning').style.display = 'none';
       document.getElementById('dayEditFields').style.display = 'block';
       document.getElementById('rowEditFields').style.display = 'none';
       document.getElementById('editPassword').value = '';
@@ -679,6 +717,7 @@
       const entry = currentEntries.find(e => e.id === entryId);
       if (!entry) return;
 
+      document.getElementById('deadlineWarning').style.display = 'none';
       document.getElementById('dayEditFields').style.display = 'none';
       document.getElementById('rowEditFields').style.display = 'block';
       document.getElementById('editPassword').value = '';
@@ -691,10 +730,46 @@
       document.getElementById('editModal').classList.add('active');
     }
 
+    // ÄNDERUNG 2: Neue Funktionen für reine Notizbearbeitung nach Fristablauf
+    function openNoteEditDay(dateKey) {
+      currentEditDateKey = dateKey;
+      const dayEntries = currentEntries.filter(e => toDateSafe(e.startTime).toISOString().slice(0, 10) === dateKey).sort((a, b) => a.startMs - b.startMs);
+      if (dayEntries.length === 0) return;
+
+      editMode = 'note-only-day';
+      currentEditEntryId = dayEntries[0].id; // Notiz wird am ersten Eintrag des Tages gespeichert
+      
+      document.getElementById('deadlineWarning').style.display = 'block';
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Notiz bearbeiten';
+      document.getElementById('editNote').value = dayEntries.find(e => e.note)?.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
+    function openNoteEditRow(entryId) {
+      editMode = 'note-only-row';
+      currentEditEntryId = entryId;
+      const entry = currentEntries.find(e => e.id === entryId);
+      if (!entry) return;
+
+      document.getElementById('deadlineWarning').style.display = 'block';
+      document.getElementById('dayEditFields').style.display = 'none';
+      document.getElementById('rowEditFields').style.display = 'none';
+      document.getElementById('editPassword').value = '';
+      document.getElementById('modalTitle').textContent = 'Notiz bearbeiten';
+      document.getElementById('editNote').value = entry.note || '';
+      
+      document.getElementById('editModal').classList.add('active');
+    }
+
     function closeModal() {
       document.getElementById('editModal').classList.remove('active');
       document.getElementById('editPassword').value = '';
       document.getElementById('editNote').value = '';
+      document.getElementById('deadlineWarning').style.display = 'none'; // Warnung zurücksetzen
       editMode = '';
       currentEditDateKey = null;
       currentEditEntryId = null;
@@ -711,7 +786,15 @@
       const note = document.getElementById('editNote').value.trim();
 
       try {
-        if (editMode === 'day-new') {
+        // ÄNDERUNG 2: Speichern von reinen Notiz-Updates
+        if (editMode === 'note-only-day' || editMode === 'note-only-row') {
+          if (currentEditEntryId) {
+            await db.collection('entries').doc(currentEditEntryId).update({
+              note: note
+            });
+          }
+        }
+        else if (editMode === 'day-new') {
           const inTime = document.getElementById('editIn').value;
           const pauseInTime = document.getElementById('editPauseIn').value;
           const pauseOutTime = document.getElementById('editPauseOut').value;
